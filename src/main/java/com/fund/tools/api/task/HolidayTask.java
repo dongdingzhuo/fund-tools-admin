@@ -148,10 +148,23 @@ public class HolidayTask {
             log.debug("请求 API: {}", url);
             String response = HttpUtil.get(url, 5000); // 设置5秒超时
     
+            // 检查响应是否为空
+            if (response == null || response.trim().isEmpty()) {
+                log.warn("获取日期{}的API返回空响应", date);
+                return null;
+            }
+    
             HolidayApiResponse apiResponse = JSONUtil.toBean(response, HolidayApiResponse.class);
     
-            if (apiResponse.getCode() != 0 || apiResponse.getType() == null) {
-                log.warn("获取日期{}的API数据异常，响应码: {}, 响应内容: {}", date, apiResponse.getCode(), response);
+            // 检查响应码和类型信息
+            if (apiResponse == null || apiResponse.getCode() == null || apiResponse.getCode() != 0) {
+                log.warn("获取日期{}的API数据异常，响应码: {}, 响应内容: {}", date, 
+                        apiResponse != null ? apiResponse.getCode() : "null", response);
+                return null;
+            }
+            
+            if (apiResponse.getType() == null) {
+                log.warn("获取日期{}的API数据缺少type字段，响应内容: {}", date, response);
                 return null;
             }
     
@@ -162,10 +175,14 @@ public class HolidayTask {
             HolidayApiResponse.HolidayInfo holidayInfo = apiResponse.getHoliday();
     
             // 设置星期
+            if (typeInfo.getWeek() == null) {
+                log.warn("获取日期{}的API数据缺少week字段", date);
+                return null;
+            }
             holiday.setWeek(typeInfo.getWeek());
     
             // 判断是否为周末（type=1表示周末）
-            boolean isWeekend = typeInfo.getType() == 1;
+            boolean isWeekend = typeInfo.getType() != null && typeInfo.getType() == 1;
             holiday.setWeekendFlag(isWeekend ? "Y" : "N");
     
             // 判断是否为节假日
