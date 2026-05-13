@@ -111,7 +111,7 @@ public class HolidayTask {
                 // 每次API调用后等待10秒，避免被限流
                 if (!currentDate.isAfter(endDate)) {
                     log.debug("等待10秒后继续...");
-                    Thread.sleep(10000);
+                    Thread.sleep(3000);
                 }
 
                 currentDate = currentDate.plusDays(1);
@@ -124,8 +124,8 @@ public class HolidayTask {
                 log.info("保存剩余{}条数据，总计保存{}条", holidayList.size(), batchSaveCount);
             }
 
-            log.info("初始化统计 - 总天数: {}, 成功: {}, 失败: {}, 跳过: {}, 分批保存次数: {}", 
-                    totalCount, successCount, failCount, skipCount, 
+            log.info("初始化统计 - 总天数: {}, 成功: {}, 失败: {}, 跳过: {}, 分批保存次数: {}",
+                    totalCount, successCount, failCount, skipCount,
                     holidayList.isEmpty() ? batchSaveCount / BATCH_SIZE + 1 : batchSaveCount / BATCH_SIZE);
         } catch (InterruptedException e) {
             log.error("初始化过程被中断", e);

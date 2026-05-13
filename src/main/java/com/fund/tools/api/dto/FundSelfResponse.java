@@ -30,6 +30,11 @@ public class FundSelfResponse implements Serializable {
     private String fundCode;
 
     /**
+     * 基金名称
+     */
+    private String fundName;
+
+    /**
      * 成本价
      */
     private BigDecimal baseAmount;
@@ -38,6 +43,31 @@ public class FundSelfResponse implements Serializable {
      * 持有份额
      */
     private BigDecimal shareQuantity;
+
+    /**
+     * 最新净值
+     */
+    private BigDecimal currentPrice;
+
+    /**
+     * 最新收益率（%）
+     */
+    private BigDecimal profitPercent;
+
+    /**
+     * 持有收益
+     */
+    private BigDecimal holdingProfit;
+
+    /**
+     * 持有收益率（%）
+     */
+    private BigDecimal holdingProfitPercent;
+
+    /**
+     * 实时数据更新时间
+     */
+    private LocalDateTime fundUpdateTime;
 
     /**
      * 创建时间
