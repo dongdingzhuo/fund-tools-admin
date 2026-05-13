@@ -35,6 +35,23 @@ public class FundSelfController {
     }
 
     /**
+     * 删除自选基金
+     */
+    @DeleteMapping("/{id}")
+    public Result<Boolean> deleteFundSelf(@PathVariable Long id) {
+        try {
+            boolean success = fundSelfService.deleteFundSelf(id);
+            if (success) {
+                return Result.success("删除成功", true);
+            } else {
+                return Result.error("删除失败，记录不存在");
+            }
+        } catch (Exception e) {
+            return Result.error(e.getMessage());
+        }
+    }
+
+    /**
      * 根据用户账号查询自选基金列表
      */
     @GetMapping("/list/{userName}")
