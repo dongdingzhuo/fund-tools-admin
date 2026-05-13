@@ -35,46 +35,6 @@ public class FundSelfController {
     }
 
     /**
-     * 更新自选基金
-     */
-    @PutMapping("/{id}")
-    public Result<Boolean> updateFundSelf(@PathVariable Long id, 
-                                          @Validated @RequestBody FundSelfRequest request) {
-        try {
-            boolean success = fundSelfService.updateFundSelf(id, request);
-            return Result.success(success);
-        } catch (Exception e) {
-            return Result.error(e.getMessage());
-        }
-    }
-
-    /**
-     * 删除自选基金
-     */
-    @DeleteMapping("/{id}")
-    public Result<Boolean> deleteFundSelf(@PathVariable Long id) {
-        try {
-            boolean success = fundSelfService.deleteFundSelf(id);
-            return Result.success(success);
-        } catch (Exception e) {
-            return Result.error(e.getMessage());
-        }
-    }
-
-    /**
-     * 根据ID查询自选基金
-     */
-    @GetMapping("/{id}")
-    public Result<FundSelfResponse> getFundSelfById(@PathVariable Long id) {
-        try {
-            FundSelfResponse response = fundSelfService.getFundSelfById(id);
-            return Result.success(response);
-        } catch (Exception e) {
-            return Result.error(e.getMessage());
-        }
-    }
-
-    /**
      * 根据用户账号查询自选基金列表
      */
     @GetMapping("/list/{userName}")
