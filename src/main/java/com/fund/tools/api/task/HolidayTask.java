@@ -65,25 +65,50 @@ public class HolidayTask {
         try {
             LocalDate startDate = LocalDate.of(2026, 1, 1);
             LocalDate endDate = LocalDate.now();
+            
+            log.info("初始化日期范围: {} 到 {}", startDate.format(DATE_FORMATTER), endDate.format(DATE_FORMATTER));
 
             List<Holiday> holidayList = new ArrayList<>();
             LocalDate currentDate = startDate;
+            int successCount = 0;
+            int failCount = 0;
+            int skipCount = 0;
+            int totalCount = 0;
 
             while (!currentDate.isAfter(endDate)) {
                 String dateStr = currentDate.format(DATE_FORMATTER);
+                totalCount++;
 
                 // 检查是否已存在
                 Holiday existing = holidayService.getHolidayByDate(dateStr);
-                if (existing == null) {
-                    Holiday holiday = fetchAndCreateHoliday(dateStr);
-                    if (holiday != null) {
-                        holidayList.add(holiday);
-                    }
+                if (existing != null) {
+                    skipCount++;
+                    log.debug("日期{}的数据已存在，跳过", dateStr);
+                    currentDate = currentDate.plusDays(1);
+                    continue;
+                }
+                
+                Holiday holiday = fetchAndCreateHoliday(dateStr);
+                if (holiday != null) {
+                    holidayList.add(holiday);
+                    successCount++;
+                    log.info("成功获取日期{}的数据 ({}/{})", dateStr, successCount + failCount, totalCount);
+                } else {
+                    failCount++;
+                    log.warn("获取日期{}的数据失败 ({}/{})", dateStr, successCount + failCount, totalCount);
+                }
+
+                // 每次API调用后等待10秒，避免被限流
+                if (!currentDate.isAfter(endDate)) {
+                    log.debug("等待10秒后继续...");
+                    Thread.sleep(10000);
                 }
 
                 currentDate = currentDate.plusDays(1);
             }
 
+            log.info("初始化统计 - 总天数: {}, 成功: {}, 失败: {}, 跳过: {}", totalCount, successCount, failCount, skipCount);
+            
             // 批量保存
             if (!holidayList.isEmpty()) {
                 holidayService.batchSaveOrUpdateHoliday(holidayList);
@@ -91,6 +116,9 @@ public class HolidayTask {
             } else {
                 log.info("所有日期数据已存在，无需初始化");
             }
+        } catch (InterruptedException e) {
+            log.error("初始化过程被中断", e);
+            Thread.currentThread().interrupt();
         } catch (Exception e) {
             log.error("初始化节假日数据失败", e);
         }
@@ -112,49 +140,54 @@ public class HolidayTask {
     }
 
     /**
-     * 从API获取数据并创建Holiday对象
+     * 从 API获取数据并创建 Holiday对象
      */
     private Holiday fetchAndCreateHoliday(String date) {
         try {
             String url = API_URL + date;
-            String response = HttpUtil.get(url);
-
+            log.debug("请求 API: {}", url);
+            String response = HttpUtil.get(url, 5000); // 设置5秒超时
+    
             HolidayApiResponse apiResponse = JSONUtil.toBean(response, HolidayApiResponse.class);
-
+    
             if (apiResponse.getCode() != 0 || apiResponse.getType() == null) {
-                log.warn("获取日期{}的API数据异常", date);
+                log.warn("获取日期{}的API数据异常，响应码: {}, 响应内容: {}", date, apiResponse.getCode(), response);
                 return null;
             }
-
+    
             Holiday holiday = new Holiday();
             holiday.setDate(date);
-
+    
             HolidayApiResponse.TypeInfo typeInfo = apiResponse.getType();
             HolidayApiResponse.HolidayInfo holidayInfo = apiResponse.getHoliday();
-
+    
             // 设置星期
             holiday.setWeek(typeInfo.getWeek());
-
+    
             // 判断是否为周末（type=1表示周末）
             boolean isWeekend = typeInfo.getType() == 1;
             holiday.setWeekendFlag(isWeekend ? "Y" : "N");
-
+    
             // 判断是否为节假日
             boolean isHoliday = holidayInfo != null && Boolean.TRUE.equals(holidayInfo.getHoliday());
             holiday.setHolidayFlag(isHoliday ? "Y" : "N");
-
+    
             // 判断是否为工作日（非周末且非节假日）
             boolean isWorkday = !isWeekend && !isHoliday;
             holiday.setWorkdayFlag(isWorkday ? "Y" : "N");
-
+    
             // 判断是否为交易日（周一到周五，且不是节假日）
             // week: 0-周日, 1-周一, 2-周二, 3-周三, 4-周四, 5-周五, 6-周六
             boolean isTradingDay = typeInfo.getWeek() >= 1 && typeInfo.getWeek() <= 5 && !isHoliday;
             holiday.setTradingDayFlag(isTradingDay ? "Y" : "N");
-
+    
+            log.debug("成功获取日期{}的数据: week={}, weekend={}, holiday={}, workday={}, tradingDay={}", 
+                    date, holiday.getWeek(), holiday.getWeekendFlag(), holiday.getHolidayFlag(), 
+                    holiday.getWorkdayFlag(), holiday.getTradingDayFlag());
+    
             return holiday;
         } catch (Exception e) {
-            log.error("从API获取日期{}的数据失败", date, e);
+            log.error("从 API获取日期{}的数据失败", date, e);
             return null;
         }
     }

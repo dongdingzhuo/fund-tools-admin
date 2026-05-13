@@ -2,8 +2,10 @@ package com.fund.tools.api.controller;
 
 import com.fund.tools.api.common.Result;
 import com.fund.tools.api.service.HolidayService;
+import com.fund.tools.api.task.HolidayTask;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -21,6 +23,9 @@ public class HolidayController {
 
     @Resource
     private HolidayService holidayService;
+
+    @Resource
+    private HolidayTask holidayTask;
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
@@ -70,6 +75,23 @@ public class HolidayController {
         } catch (Exception e) {
             log.error("查询最近交易日失败", e);
             return Result.error("查询失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 手动触发初始化节假日数据（用于测试）
+     *
+     * @return 初始化结果
+     */
+    @PostMapping("/init")
+    public Result<String> initHolidayData() {
+        try {
+            log.info("手动触发初始化节假日数据");
+            holidayTask.initHolidayData();
+            return Result.success("初始化完成，请查看日志获取详细信息");
+        } catch (Exception e) {
+            log.error("初始化节假日数据失败", e);
+            return Result.error("初始化失败: " + e.getMessage());
         }
     }
 }
