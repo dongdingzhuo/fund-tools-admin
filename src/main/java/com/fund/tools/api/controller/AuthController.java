@@ -2,6 +2,7 @@ package com.fund.tools.api.controller;
 
 import cn.hutool.core.util.StrUtil;
 import com.fund.tools.api.common.Result;
+import com.fund.tools.api.dto.CreateUserRequest;
 import com.fund.tools.api.dto.LoginRequest;
 import com.fund.tools.api.dto.LoginResponse;
 import com.fund.tools.api.entity.User;
@@ -46,5 +47,28 @@ public class AuthController {
         );
 
         return Result.success("登录成功", response);
+    }
+    
+    /**
+     * 创建用户
+     * 只需要传入userName和nickName，ID由雪花算法自动生成
+     */
+    @PostMapping("/register")
+    public Result<User> register(@RequestBody CreateUserRequest request) {
+        // 参数校验
+        if (request == null || StrUtil.isBlank(request.getUserName())) {
+            return Result.error("用户名不能为空");
+        }
+        if (StrUtil.isBlank(request.getNickName())) {
+            return Result.error("昵称不能为空");
+        }
+        
+        try {
+            // 创建用户
+            User user = userService.createUser(request.getUserName(), request.getNickName());
+            return Result.success("用户创建成功", user);
+        } catch (RuntimeException e) {
+            return Result.error(e.getMessage());
+        }
     }
 }

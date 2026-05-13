@@ -19,4 +19,21 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         wrapper.eq(User::getUserName, userName);
         return this.getOne(wrapper);
     }
+    
+    @Override
+    public User createUser(String userName, String nickName) {
+        // 检查用户名是否已存在
+        User existingUser = this.findByUserName(userName);
+        if (existingUser != null) {
+            throw new RuntimeException("用户名已存在");
+        }
+        
+        // 创建新用户（ID由雪花算法自动生成）
+        User user = new User();
+        user.setUserName(userName);
+        user.setNickName(nickName);
+        
+        this.save(user);
+        return user;
+    }
 }

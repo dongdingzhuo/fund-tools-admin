@@ -12,4 +12,9 @@ public interface UserService extends IService<User> {
      * 根据用户名查询用户
      */
     User findByUserName(String userName);
+    
+    /**
+     * 创建用户
+     */
+    User createUser(String userName, String nickName);
 }

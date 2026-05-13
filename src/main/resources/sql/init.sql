@@ -1,9 +1,13 @@
-USE fund;
 -- 创建用户信息表
-CREATE TABLE `t_user` (
+CREATE TABLE IF NOT EXISTS `t_user` (
   `id` bigint NOT NULL,
   `user_name` varchar(255) NOT NULL,
   `nick_name` varchar(255) NOT NULL,
-  PRIMARY KEY (`id`) ,
+  PRIMARY KEY (`id`),
   UNIQUE KEY `idx_1` (`user_name`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='用户表';
+);
+
+-- 插入测试用户数据
+INSERT INTO `t_user` (`id`, `user_name`, `nick_name`) VALUES
+(1, 'dongdingzhuo', '董定卓'),
+(2, 'admin', '管理员');
