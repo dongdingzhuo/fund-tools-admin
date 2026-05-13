@@ -65,7 +65,7 @@ public class HolidayTask {
         try {
             LocalDate startDate = LocalDate.of(2026, 1, 1);
             LocalDate endDate = LocalDate.now();
-            
+
             log.info("初始化日期范围: {} 到 {}", startDate.format(DATE_FORMATTER), endDate.format(DATE_FORMATTER));
 
             List<Holiday> holidayList = new ArrayList<>();
@@ -87,7 +87,7 @@ public class HolidayTask {
                     currentDate = currentDate.plusDays(1);
                     continue;
                 }
-                
+
                 Holiday holiday = fetchAndCreateHoliday(dateStr);
                 if (holiday != null) {
                     holidayList.add(holiday);
@@ -108,7 +108,7 @@ public class HolidayTask {
             }
 
             log.info("初始化统计 - 总天数: {}, 成功: {}, 失败: {}, 跳过: {}", totalCount, successCount, failCount, skipCount);
-            
+
             // 批量保存
             if (!holidayList.isEmpty()) {
                 holidayService.batchSaveOrUpdateHoliday(holidayList);
@@ -146,62 +146,62 @@ public class HolidayTask {
         try {
             String url = API_URL + date;
             log.debug("请求 API: {}", url);
-            String response = HttpUtil.get(url, 5000); // 设置5秒超时
-    
+            String response = HttpUtil.get(url, 60000); // 设置60秒超时
+            log.info("API返回: {}", response);
             // 检查响应是否为空
             if (response == null || response.trim().isEmpty()) {
                 log.warn("获取日期{}的API返回空响应", date);
                 return null;
             }
-    
+
             HolidayApiResponse apiResponse = JSONUtil.toBean(response, HolidayApiResponse.class);
-    
+
             // 检查响应码和类型信息
             if (apiResponse == null || apiResponse.getCode() == null || apiResponse.getCode() != 0) {
-                log.warn("获取日期{}的API数据异常，响应码: {}, 响应内容: {}", date, 
+                log.warn("获取日期{}的API数据异常，响应码: {}, 响应内容: {}", date,
                         apiResponse != null ? apiResponse.getCode() : "null", response);
                 return null;
             }
-            
+
             if (apiResponse.getType() == null) {
                 log.warn("获取日期{}的API数据缺少type字段，响应内容: {}", date, response);
                 return null;
             }
-    
+
             Holiday holiday = new Holiday();
             holiday.setDate(date);
-    
+
             HolidayApiResponse.TypeInfo typeInfo = apiResponse.getType();
             HolidayApiResponse.HolidayInfo holidayInfo = apiResponse.getHoliday();
-    
+
             // 设置星期
             if (typeInfo.getWeek() == null) {
                 log.warn("获取日期{}的API数据缺少week字段", date);
                 return null;
             }
             holiday.setWeek(typeInfo.getWeek());
-    
+
             // 判断是否为周末（type=1表示周末）
             boolean isWeekend = typeInfo.getType() != null && typeInfo.getType() == 1;
             holiday.setWeekendFlag(isWeekend ? "Y" : "N");
-    
+
             // 判断是否为节假日
             boolean isHoliday = holidayInfo != null && Boolean.TRUE.equals(holidayInfo.getHoliday());
             holiday.setHolidayFlag(isHoliday ? "Y" : "N");
-    
+
             // 判断是否为工作日（非周末且非节假日）
             boolean isWorkday = !isWeekend && !isHoliday;
             holiday.setWorkdayFlag(isWorkday ? "Y" : "N");
-    
+
             // 判断是否为交易日（周一到周五，且不是节假日）
             // week: 0-周日, 1-周一, 2-周二, 3-周三, 4-周四, 5-周五, 6-周六
             boolean isTradingDay = typeInfo.getWeek() >= 1 && typeInfo.getWeek() <= 5 && !isHoliday;
             holiday.setTradingDayFlag(isTradingDay ? "Y" : "N");
-    
-            log.debug("成功获取日期{}的数据: week={}, weekend={}, holiday={}, workday={}, tradingDay={}", 
-                    date, holiday.getWeek(), holiday.getWeekendFlag(), holiday.getHolidayFlag(), 
+
+            log.debug("成功获取日期{}的数据: week={}, weekend={}, holiday={}, workday={}, tradingDay={}",
+                    date, holiday.getWeek(), holiday.getWeekendFlag(), holiday.getHolidayFlag(),
                     holiday.getWorkdayFlag(), holiday.getTradingDayFlag());
-    
+
             return holiday;
         } catch (Exception e) {
             log.error("从 API获取日期{}的数据失败", date, e);
