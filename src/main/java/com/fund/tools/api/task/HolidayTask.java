@@ -74,6 +74,8 @@ public class HolidayTask {
             int failCount = 0;
             int skipCount = 0;
             int totalCount = 0;
+            int batchSaveCount = 0;
+            final int BATCH_SIZE = 7; // 每7条保存一次
 
             while (!currentDate.isAfter(endDate)) {
                 String dateStr = currentDate.format(DATE_FORMATTER);
@@ -98,6 +100,14 @@ public class HolidayTask {
                     log.warn("获取日期{}的数据失败 ({}/{})", dateStr, successCount + failCount, totalCount);
                 }
 
+                // 每7条保存一次
+                if (holidayList.size() >= BATCH_SIZE) {
+                    holidayService.batchSaveOrUpdateHoliday(holidayList);
+                    batchSaveCount += holidayList.size();
+                    log.info("批次保存完成，已保存{}条数据", batchSaveCount);
+                    holidayList.clear();
+                }
+
                 // 每次API调用后等待10秒，避免被限流
                 if (!currentDate.isAfter(endDate)) {
                     log.debug("等待10秒后继续...");
@@ -107,15 +117,16 @@ public class HolidayTask {
                 currentDate = currentDate.plusDays(1);
             }
 
-            log.info("初始化统计 - 总天数: {}, 成功: {}, 失败: {}, 跳过: {}", totalCount, successCount, failCount, skipCount);
-
-            // 批量保存
+            // 保存剩余的数据
             if (!holidayList.isEmpty()) {
                 holidayService.batchSaveOrUpdateHoliday(holidayList);
-                log.info("批量初始化节假日数据完成，共{}条", holidayList.size());
-            } else {
-                log.info("所有日期数据已存在，无需初始化");
+                batchSaveCount += holidayList.size();
+                log.info("保存剩余{}条数据，总计保存{}条", holidayList.size(), batchSaveCount);
             }
+
+            log.info("初始化统计 - 总天数: {}, 成功: {}, 失败: {}, 跳过: {}, 分批保存次数: {}", 
+                    totalCount, successCount, failCount, skipCount, 
+                    holidayList.isEmpty() ? batchSaveCount / BATCH_SIZE + 1 : batchSaveCount / BATCH_SIZE);
         } catch (InterruptedException e) {
             log.error("初始化过程被中断", e);
             Thread.currentThread().interrupt();
@@ -145,9 +156,8 @@ public class HolidayTask {
     private Holiday fetchAndCreateHoliday(String date) {
         try {
             String url = API_URL + date;
-            log.debug("请求 API: {}", url);
             String response = HttpUtil.get(url, 60000); // 设置60秒超时
-            log.info("API返回: {}", response);
+            log.info("请求 API: {}, API返回: {}", url, response);
             // 检查响应是否为空
             if (response == null || response.trim().isEmpty()) {
                 log.warn("获取日期{}的API返回空响应", date);
