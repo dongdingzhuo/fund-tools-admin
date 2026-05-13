@@ -80,7 +80,10 @@ public class FundRealTimeTask {
 
             for (FundLast fundLast : toUpdateList) {
                 try {
-                    FundLast updatedFund = fetchAndUpdateFundData(fundLast.getFundCode());
+                    // 获取数据库中现有的数据，保留prevPrice
+                    FundLast existingFund = fundLastService.getFundLastByCode(fundLast.getFundCode());
+                    
+                    FundLast updatedFund = fetchAndUpdateFundData(fundLast.getFundCode(), existingFund);
                     if (updatedFund != null) {
                         updateList.add(updatedFund);
                         successCount++;
@@ -130,56 +133,74 @@ public class FundRealTimeTask {
     }
 
     /**
-     * 从API获取基金数据并更新
+     * 从 API获取基金数据并更新
      */
-    private FundLast fetchAndUpdateFundData(String fundCode) {
+    private FundLast fetchAndUpdateFundData(String fundCode, FundLast existingFund) {
         try {
             String url = API_URL + fundCode + ".js";
             log.debug("请求基金数据: {}", url);
-
+    
             String response = HttpUtil.get(url, 60000); // 设置60秒超时
-
+    
             // 解析返回数据，格式为：jsonpgz({...});
             if (response == null || response.trim().isEmpty()) {
-                log.warn("基金{}的API返回空响应", fundCode);
+                log.warn("基金{}的 API返回空响应", fundCode);
                 return null;
             }
-
+    
             // 提取JSON部分
             String jsonStr = extractJson(response);
             if (jsonStr == null) {
-                log.warn("基金{}的API返回数据格式错误", fundCode);
+                log.warn("基金{}的 API返回数据格式错误", fundCode);
                 return null;
             }
-
+    
             TiantianFundResponse apiResponse = JSONUtil.toBean(jsonStr, TiantianFundResponse.class);
-
+    
             if (apiResponse == null || apiResponse.getFundcode() == null) {
-                log.warn("基金{}的API数据解析失败", fundCode);
+                log.warn("基金{}的 API数据解析失败", fundCode);
                 return null;
             }
-
+    
             // 构建FundLast对象
             FundLast fundLast = new FundLast();
             fundLast.setFundCode(apiResponse.getFundcode());
             fundLast.setFundName(apiResponse.getName());
-
+    
             // 设置估算值作为当前价格
+            BigDecimal currentPrice = null;
             if (apiResponse.getGsz() != null && !apiResponse.getGsz().isEmpty()) {
-                fundLast.setCurrentPrice(new BigDecimal(apiResponse.getGsz()));
+                currentPrice = new BigDecimal(apiResponse.getGsz());
+                fundLast.setCurrentPrice(currentPrice);
             }
-
+    
             // 设置估算涨跌幅作为收益率
             if (apiResponse.getGszzl() != null && !apiResponse.getGszzl().isEmpty()) {
                 fundLast.setProfitPercent(new BigDecimal(apiResponse.getGszzl()));
             }
-
-            log.debug("成功获取基金{}的数据: name={}, price={}, profit={}",
-                    fundCode, apiResponse.getName(), apiResponse.getGsz(), apiResponse.getGszzl());
-
+    
+            // 处理prevPrice：如果存在旧数据，将旧的currentPrice保存为prevPrice
+            if (existingFund != null && existingFund.getCurrentPrice() != null) {
+                // 如果当前价格和之前不同，说明是新的交易日，将之前的价格保存为prevPrice
+                if (currentPrice != null && currentPrice.compareTo(existingFund.getCurrentPrice()) != 0) {
+                    fundLast.setPrevPrice(existingFund.getCurrentPrice());
+                    log.debug("基金{}更新prevPrice: {}", fundCode, existingFund.getCurrentPrice());
+                } else {
+                    // 否则保持原有的prevPrice
+                    fundLast.setPrevPrice(existingFund.getPrevPrice());
+                }
+            } else if (currentPrice != null) {
+                // 如果是新基金，prevPrice默认等于currentPrice
+                fundLast.setPrevPrice(currentPrice);
+            }
+    
+            log.debug("成功获取基金{}的数据: name={}, price={}, prevPrice={}, profit={}",
+                    fundCode, apiResponse.getName(), apiResponse.getGsz(), 
+                    fundLast.getPrevPrice(), apiResponse.getGszzl());
+    
             return fundLast;
         } catch (Exception e) {
-            log.error("从API获取基金{}的数据失败", fundCode, e);
+            log.error("从 API获取基金{}的数据失败", fundCode, e);
             return null;
         }
     }

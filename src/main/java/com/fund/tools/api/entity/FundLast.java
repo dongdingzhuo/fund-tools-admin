@@ -45,6 +45,11 @@ public class FundLast implements Serializable {
     private BigDecimal currentPrice;
 
     /**
+     * 上一个交易日净值
+     */
+    private BigDecimal prevPrice;
+
+    /**
      * 更新时间
      */
     private LocalDateTime updateTime;

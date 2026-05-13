@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS `t_fund_last` (
   `fund_name` varchar(255) NOT NULL COMMENT '基金名称',
   `profit_percent` decimal(10, 4) DEFAULT '0.0000' COMMENT '最新收益率',
   `current_price` decimal(10, 4) DEFAULT '0.0000' COMMENT '净值',
+  `prev_price` decimal(10, 4) DEFAULT '0.0000' COMMENT '上一个交易日净值',
   `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_fund_code` (`fund_code`),

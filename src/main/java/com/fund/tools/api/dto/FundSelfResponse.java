@@ -50,6 +50,11 @@ public class FundSelfResponse implements Serializable {
     private BigDecimal currentPrice;
 
     /**
+     * 上一个交易日净值
+     */
+    private BigDecimal prevPrice;
+
+    /**
      * 最新收益率（%）
      */
     private BigDecimal profitPercent;

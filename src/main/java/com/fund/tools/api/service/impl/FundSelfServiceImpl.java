@@ -144,6 +144,8 @@ public class FundSelfServiceImpl implements FundSelfService {
                 response.setFundName(fundLast.getFundName());
                 // 设置最新净值
                 response.setCurrentPrice(fundLast.getCurrentPrice());
+                // 设置上一个交易日净值
+                response.setPrevPrice(fundLast.getPrevPrice());
                 // 设置最新收益率
                 response.setProfitPercent(fundLast.getProfitPercent());
                 // 设置实时数据更新时间
@@ -236,8 +238,10 @@ public class FundSelfServiceImpl implements FundSelfService {
             fundLast.setFundName(apiResponse.getName());
 
             // 设置估算值作为当前价格
+            BigDecimal currentPrice = null;
             if (apiResponse.getGsz() != null && !apiResponse.getGsz().isEmpty()) {
-                fundLast.setCurrentPrice(new BigDecimal(apiResponse.getGsz()));
+                currentPrice = new BigDecimal(apiResponse.getGsz());
+                fundLast.setCurrentPrice(currentPrice);
             }
 
             // 设置估算涨跌幅作为收益率
@@ -245,8 +249,14 @@ public class FundSelfServiceImpl implements FundSelfService {
                 fundLast.setProfitPercent(new BigDecimal(apiResponse.getGszzl()));
             }
 
-            log.info("成功获取基金{}的实时数据: name={}, price={}, profit={}",
-                    fundCode, apiResponse.getName(), apiResponse.getGsz(), apiResponse.getGszzl());
+            // 新基金prevPrice默认等于currentPrice
+            if (currentPrice != null) {
+                fundLast.setPrevPrice(currentPrice);
+            }
+
+            log.info("成功获取基金{}的实时数据: name={}, price={}, prevPrice={}, profit={}",
+                    fundCode, apiResponse.getName(), apiResponse.getGsz(), 
+                    fundLast.getPrevPrice(), apiResponse.getGszzl());
 
             return fundLast;
         } catch (Exception e) {
