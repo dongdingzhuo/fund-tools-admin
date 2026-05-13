@@ -57,8 +57,8 @@ mysql -u root -p < src/main/resources/sql/init.sql
 ```yaml
 spring:
   datasource:
-    url: jdbc:mysql://localhost:3306/fund?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
-    username: root
+    url: jdbc:mysql://localhost:3306/fund?useUnicode=true&characterEncoding=utf8&useSSL=true&serverTimezone=Asia/Shanghai
+    username: your_username
     password: your_password
 ```
 
@@ -129,11 +129,10 @@ Content-Type: application/json
 
 数据库初始化后，有以下测试用户：
 
-| 用户名 | 昵称 | 说明 |
-|--------|------|------|
-| admin | 管理员 | 管理员账号 |
-| test | 测试用户 | 测试账号 |
-| user1 | 用户一 | 普通用户 |
+| 用户名          | 昵称  | 说明 |
+|--------------|-----|------|
+| admin        | 管理员 | 管理员账号 |
+| dongdingzhuo | 董定卓 | 测试账号 |
 
 ## 注意事项
 
