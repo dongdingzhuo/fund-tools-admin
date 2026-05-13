@@ -56,3 +56,19 @@ CREATE TABLE IF NOT EXISTS `t_holiday` (
   KEY `idx_workday_flag` (`workday_flag`),
   KEY `idx_trading_day_flag` (`trading_day_flag`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='节假日日期表';
+
+-- 创建基金历史净值表
+CREATE TABLE IF NOT EXISTS `t_fund_history` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `fund_code` varchar(20) NOT NULL COMMENT '基金代码',
+  `fund_name` varchar(255) NOT NULL COMMENT '基金名称',
+  `date` varchar(10) NOT NULL COMMENT '日期（yyyy-MM-dd格式）',
+  `history_price` decimal(10, 4) NOT NULL DEFAULT '0.0000' COMMENT '净值',
+  `profit_percent` decimal(10, 4) DEFAULT '0.0000' COMMENT '日增长率（%）',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_fund_date` (`fund_code`, `date`),
+  KEY `idx_fund_code` (`fund_code`),
+  KEY `idx_date` (`date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='基金历史净值表';
