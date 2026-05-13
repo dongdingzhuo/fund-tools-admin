@@ -45,6 +45,23 @@ public class FundHistoryTask {
      */
     @Scheduled(cron = "0 0/10 18-23 * * MON-FRI")
     public void updateFundHistoryData() {
+        executeUpdate();
+    }
+
+    /**
+     * 测试用：每分钟执行一次（用于调试）
+     * 如需启用，请取消注释下面的 @Scheduled 注解
+     */
+    // @Scheduled(cron = "0 0/1 * * * ?")
+    public void testUpdateFundHistoryData() {
+        log.info("【测试模式】开始执行基金历史净值更新任务");
+        executeUpdate();
+    }
+
+    /**
+     * 执行更新逻辑
+     */
+    private void executeUpdate() {
         log.info("开始执行基金历史净值更新任务");
 
         try {
@@ -169,9 +186,12 @@ public class FundHistoryTask {
             String url = String.format("%s?type=lsjz&code=%s&page=1&per=30&sdate=%s&edate=%s",
                     API_URL, fundCode, startDate, endDate);
 
-            log.debug("请求基金历史净值: {}", url);
+            log.info("请求基金历史净值URL: {}", url);
 
             String response = HttpUtil.get(url, 60000); // 设置60秒超时
+
+            // 打印完整的API响应
+            log.info("基金{}的API完整响应: {}", fundCode, response);
 
             if (response == null || response.trim().isEmpty()) {
                 log.warn("基金{}的API返回空响应", fundCode);
@@ -208,8 +228,8 @@ public class FundHistoryTask {
      */
     private List<FundHistory> parseApiResponse(String response, String fundCode, String fundName) {
         try {
-            // 提取content内容
-            Pattern pattern = Pattern.compile("content:\"([^\"]*)\"");
+            // 提取content内容（使用 DOTALL 模式匹配跨行内容）
+            Pattern pattern = Pattern.compile("content:\"(.*?)\",\"records", Pattern.DOTALL);
             Matcher matcher = pattern.matcher(response);
 
             if (!matcher.find()) {
@@ -218,9 +238,11 @@ public class FundHistoryTask {
             }
 
             String content = matcher.group(1);
+            log.info("基金{}提取的content内容: {}", fundCode, content);
 
-            // 按行分割
-            String[] lines = content.split("\\\\n");
+            // 按换行符分割（支持 \n 和 \\n 两种格式）
+            String[] lines = content.split("\\\\n|\\n");
+            log.info("基金{}分割后的行数: {}", fundCode, lines.length);
 
             List<FundHistory> historyList = new ArrayList<>();
 
@@ -233,6 +255,7 @@ public class FundHistoryTask {
 
                 // 按\t分割字段
                 String[] fields = line.split("\t");
+                log.info("基金{}第{}行字段数: {}, 内容: [{}]", fundCode, i, fields.length, line);
 
                 if (fields.length >= 4) {
                     FundHistory history = new FundHistory();
@@ -257,14 +280,22 @@ public class FundHistoryTask {
                             history.setProfitPercent(new BigDecimal(rateStr));
                         }
                     } catch (NumberFormatException e) {
-                        log.debug("基金{}的日期{}日增长率解析失败: {}", fundCode, fields[0], fields[3]);
+                        log.info("基金{}的日期{}日增长率解析失败: {}", fundCode, fields[0], fields[3]);
                     }
 
                     historyList.add(history);
+                } else {
+                    log.warn("基金{}第{}行字段数不足4个，实际: {}, 内容: [{}]", fundCode, i, fields.length, line);
                 }
             }
 
-            return historyList.isEmpty() ? null : historyList;
+            if (historyList.isEmpty()) {
+                log.warn("基金{}解析后没有有效数据", fundCode);
+                return null;
+            }
+            
+            log.info("基金{}成功解析到{}条历史净值数据", fundCode, historyList.size());
+            return historyList;
         } catch (Exception e) {
             log.error("解析基金{}的API响应失败", fundCode, e);
             return null;
