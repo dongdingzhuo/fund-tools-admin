@@ -35,6 +35,9 @@ public class FundRealTimeTask {
     @Resource
     private HolidayService holidayService;
 
+    @Resource
+    private com.fund.tools.api.mapper.FundSelfMapper fundSelfMapper;
+
     private static final String API_URL = ApiConstants.TIAN_TIAN_FUND_API;
     private static final int MAX_UPDATE_COUNT = BatchConstants.MAX_UPDATE_COUNT; // 每次最多更新5条数据
 
@@ -62,45 +65,45 @@ public class FundRealTimeTask {
 
             log.info("当前是交易日且在交易时间内，开始更新基金数据");
 
-            // 获取所有基金代码
-            List<FundLast> fundLastList = fundLastService.getAllFundLast();
+            // 从自选基金表获取所有唯一的基金代码
+            List<String> fundCodeList = fundSelfMapper.selectDistinctFundCodes();
 
-            if (fundLastList == null || fundLastList.isEmpty()) {
-                log.info("t_fund_last表中没有基金数据，跳过更新");
+            if (fundCodeList == null || fundCodeList.isEmpty()) {
+                log.info("t_fund_self表中没有自选基金数据，跳过更新");
                 return;
             }
 
             // 限制每次最多更新5条数据，防止内存溢出
-            int totalSize = fundLastList.size();
+            int totalSize = fundCodeList.size();
             int updateSize = Math.min(totalSize, MAX_UPDATE_COUNT);
-            List<FundLast> toUpdateList = fundLastList.subList(0, updateSize);
+            List<String> toUpdateCodeList = fundCodeList.subList(0, updateSize);
             
-            log.info("共有{}只基金，本次更新{}只", totalSize, updateSize);
+            log.info("共有{}只唯一基金，本次更新{}只", totalSize, updateSize);
 
             List<FundLast> updateList = new ArrayList<>();
             int successCount = 0;
             int failCount = 0;
 
-            for (FundLast fundLast : toUpdateList) {
+            for (String fundCode : toUpdateCodeList) {
                 try {
-                    // 获取数据库中现有的数据，保留prevPrice
-                    FundLast existingFund = fundLastService.getFundLastByCode(fundLast.getFundCode());
+                    // 获取数据库中现有的数据
+                    FundLast existingFund = fundLastService.getFundLastByCode(fundCode);
                     
-                    FundLast updatedFund = fetchAndUpdateFundData(fundLast.getFundCode(), existingFund);
+                    FundLast updatedFund = fetchAndUpdateFundData(fundCode, existingFund);
                     if (updatedFund != null) {
                         updateList.add(updatedFund);
                         successCount++;
-                        log.info("成功获取基金{}的实时数据", fundLast.getFundCode());
+                        log.info("成功获取基金{}的实时数据", fundCode);
                     } else {
                         failCount++;
-                        log.warn("获取基金{}的实时数据失败", fundLast.getFundCode());
+                        log.warn("获取基金{}的实时数据失败", fundCode);
                     }
 
                     // 每次请求后等待1秒，避免频繁调用
                     Thread.sleep(ApiConstants.API_REQUEST_INTERVAL_MS);
                 } catch (Exception e) {
                     failCount++;
-                    log.error("处理基金{}数据时发生异常", fundLast.getFundCode(), e);
+                    log.error("处理基金{}数据时发生异常", fundCode, e);
                 }
             }
 
@@ -166,6 +169,15 @@ public class FundRealTimeTask {
                 fundLast.setCurrentPrice(currentPrice);
             }
             
+            // 设置单位净值(dwjz)作为上一个交易日净值
+            if (apiResponse.getDwjz() != null && !apiResponse.getDwjz().isEmpty()) {
+                fundLast.setPrevPrice(new BigDecimal(apiResponse.getDwjz()));
+                log.debug("基金{}的prevPrice设置为API返回的dwjz: {}", fundCode, apiResponse.getDwjz());
+            } else if (currentPrice != null) {
+                // 如果dwjz为空，使用currentPrice作为prevPrice
+                fundLast.setPrevPrice(currentPrice);
+            }
+            
             // 设置估算涨跌幅作为收益率
             if (apiResponse.getGszzl() != null && !apiResponse.getGszzl().isEmpty()) {
                 fundLast.setProfitPercent(new BigDecimal(apiResponse.getGszzl()));
@@ -183,24 +195,17 @@ public class FundRealTimeTask {
                 }
             }
     
-            // 处理prevPrice：如果存在旧数据，将旧的currentPrice保存为prevPrice
-            if (existingFund != null && existingFund.getCurrentPrice() != null) {
-                // 如果当前价格和之前不同，说明是新的交易日，将之前的价格保存为prevPrice
-                if (currentPrice != null && currentPrice.compareTo(existingFund.getCurrentPrice()) != 0) {
-                    fundLast.setPrevPrice(existingFund.getCurrentPrice());
-                    log.debug("基金{}更新prevPrice: {}", fundCode, existingFund.getCurrentPrice());
-                } else {
-                    // 否则保持原有的prevPrice
-                    fundLast.setPrevPrice(existingFund.getPrevPrice());
+            // 设置数据时间为API返回的估算时间（gztime）
+            if (apiResponse.getGztime() != null && !apiResponse.getGztime().isEmpty()) {
+                try {
+                    // gztime格式为 "yyyy-MM-dd HH:mm"，需要转换为LocalDateTime
+                    LocalDateTime dataTime = LocalDateTime.parse(apiResponse.getGztime(), DateFormatConstants.DATETIME_MINUTE_FORMATTER);
+                    fundLast.setDataTime(dataTime);
+                    log.debug("基金{}的数据时间设置为: {}", fundCode, dataTime);
+                } catch (Exception e) {
+                    log.warn("基金{}的gztime解析失败: {}", fundCode, apiResponse.getGztime(), e);
                 }
-            } else if (currentPrice != null) {
-                // 如果是新基金，prevPrice默认等于currentPrice
-                fundLast.setPrevPrice(currentPrice);
             }
-    
-            log.debug("成功获取基金{}的数据: name={}, price={}, prevPrice={}, profit={}",
-                    fundCode, apiResponse.getName(), apiResponse.getGsz(), 
-                    fundLast.getPrevPrice(), apiResponse.getGszzl());
     
             return fundLast;
         } catch (Exception e) {

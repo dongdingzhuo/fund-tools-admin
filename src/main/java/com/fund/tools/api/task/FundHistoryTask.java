@@ -38,6 +38,9 @@ public class FundHistoryTask {
     @Resource
     private HolidayService holidayService;
 
+    @Resource
+    private com.fund.tools.api.mapper.FundSelfMapper fundSelfMapper;
+
     private static final String API_URL = ApiConstants.EASTMONEY_F10_API;
     private static final int MAX_UPDATE_COUNT = BatchConstants.MAX_UPDATE_COUNT; // 每次最多更新5条数据
 
@@ -54,7 +57,7 @@ public class FundHistoryTask {
      * 测试用：每分钟执行一次（用于调试）
      * 如需启用，请取消注释下面的 @Scheduled 注解
      */
-     @Scheduled(cron = "0 17 * * * ?")
+     //@Scheduled(cron = "0 0/1 * * * ?")
     public void testUpdateFundHistoryData() {
         log.info("【测试模式】开始执行基金历史净值更新任务");
         executeUpdate();
@@ -76,20 +79,20 @@ public class FundHistoryTask {
 
             log.info("当前是交易日，开始更新基金历史净值数据");
 
-            // 获取所有实时基金数据
-            List<FundLast> fundLastList = fundLastService.getAllFundLast();
+            // 从自选基金表获取所有唯一的基金代码
+            List<String> fundCodeList = fundSelfMapper.selectDistinctFundCodes();
 
-            if (fundLastList == null || fundLastList.isEmpty()) {
-                log.info("t_fund_last表中没有基金数据，跳过更新");
+            if (fundCodeList == null || fundCodeList.isEmpty()) {
+                log.info("t_fund_self表中没有自选基金数据，跳过更新");
                 return;
             }
 
             // 限制每次最多更新5条数据，防止内存溢出
-            int totalSize = fundLastList.size();
+            int totalSize = fundCodeList.size();
             int updateSize = Math.min(totalSize, MAX_UPDATE_COUNT);
-            List<FundLast> toUpdateList = fundLastList.subList(0, updateSize);
+            List<String> toUpdateCodeList = fundCodeList.subList(0, updateSize);
 
-            log.info("共有{}只基金，本次更新{}只", totalSize, updateSize);
+            log.info("共有{}只唯一基金，本次更新{}只", totalSize, updateSize);
 
             // 计算日期范围：最近2个交易日
             String formattedEndDate = LocalDate.now().format(DateFormatConstants.DATE_FORMATTER);
@@ -101,36 +104,40 @@ public class FundHistoryTask {
             int failCount = 0;
             int skipCount = 0;
 
-            for (FundLast fundLast : toUpdateList) {
+            for (String fundCode : toUpdateCodeList) {
                 try {
                     // 判断该基金今日数据是否已获取
-                    if (isHistoryDataExists(fundLast.getFundCode(), formattedEndDate)) {
+                    if (isHistoryDataExists(fundCode, formattedEndDate)) {
                         skipCount++;
-                        log.debug("基金{}的{}数据已存在，跳过", fundLast.getFundCode(), formattedEndDate);
+                        log.debug("基金{}的{}数据已存在，跳过", fundCode, formattedEndDate);
                         continue;
                     }
 
+                    // 获取基金名称（从实时数据表中获取）
+                    FundLast existingFund = fundLastService.getFundLastByCode(fundCode);
+                    String fundName = existingFund != null ? existingFund.getFundName() : fundCode;
+
                     // 获取基金历史净值
                     boolean success = fetchAndUpdateHistoryData(
-                            fundLast.getFundCode(),
-                            fundLast.getFundName(),
+                            fundCode,
+                            fundName,
                             formattedStartDate,
                             formattedEndDate
                     );
 
                     if (success) {
                         successCount++;
-                        log.info("成功获取基金{}的历史净值数据", fundLast.getFundCode());
+                        log.info("成功获取基金{}的历史净值数据", fundCode);
                     } else {
                         failCount++;
-                        log.warn("获取基金{}的历史净值数据失败", fundLast.getFundCode());
+                        log.warn("获取基金{}的历史净值数据失败", fundCode);
                     }
 
                     // 每次请求后等待1秒，避免频繁调用
                     Thread.sleep(ApiConstants.API_REQUEST_INTERVAL_MS);
                 } catch (Exception e) {
                     failCount++;
-                    log.error("处理基金{}数据时发生异常", fundLast.getFundCode(), e);
+                    log.error("处理基金{}数据时发生异常", fundCode, e);
                 }
             }
 
@@ -334,15 +341,8 @@ public class FundHistoryTask {
                 // 更新currentPrice为今天的净值
                 existingFund.setCurrentPrice(todayHistory.getHistoryPrice());
 
-                // 更新prevPrice为上一个交易日的净值
-                if (prevHistory != null && prevHistory.getHistoryPrice() != null) {
-                    existingFund.setPrevPrice(prevHistory.getHistoryPrice());
-                    log.debug("基金{}的prevPrice设置为上一个交易日({})的净值: {}",
-                            fundCode, prevHistory.getDate(), prevHistory.getHistoryPrice());
-                } else if (existingFund.getCurrentPrice() != null) {
-                    // 如果没有找到上一个交易日数据，保持原有的prevPrice
-                    log.debug("基金{}未找到上一个交易日数据，保持原有prevPrice", fundCode);
-                }
+                // 不改变prevPrice字段值，保持原有值
+                log.debug("基金{}保持原有prevPrice: {}", fundCode, existingFund.getPrevPrice());
 
                 // 直接使用API返回的日增长率作为收益率
                 if (todayHistory.getProfitPercent() != null) {

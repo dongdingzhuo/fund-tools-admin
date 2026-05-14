@@ -18,6 +18,7 @@ import com.fund.tools.api.mapper.FundSelfMapper;
 import com.fund.tools.api.service.FundLastService;
 import com.fund.tools.api.service.FundSelfService;
 import com.fund.tools.api.service.HolidayService;
+import com.fund.tools.api.service.AsyncFundTaskService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,7 +28,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -47,6 +47,9 @@ public class FundSelfServiceImpl implements FundSelfService {
     @Resource
     private HolidayService holidayService;
 
+    @Resource
+    private AsyncFundTaskService asyncFundTaskService;  // 注入异步基金任务服务
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean addFundSelf(FundSelfRequest request) {
@@ -64,8 +67,9 @@ public class FundSelfServiceImpl implements FundSelfService {
         boolean insertSuccess = fundSelfMapper.insert(fundSelf) > 0;
         
         if (insertSuccess) {
-            // 同步到实时基金表
-            syncToFundLast(request.getFundCode());
+            // 调用异步基金任务服务
+            asyncFundTaskService.asyncSyncToFundLast(request.getFundCode());
+            asyncFundTaskService.asyncFetchHistoryData(request.getFundCode());
         }
         
         return insertSuccess;
