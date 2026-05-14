@@ -1,6 +1,9 @@
 package com.fund.tools.api.task;
 
 import cn.hutool.http.HttpUtil;
+import com.fund.tools.api.config.ApiConstants;
+import com.fund.tools.api.config.BatchConstants;
+import com.fund.tools.api.config.DateFormatConstants;
 import com.fund.tools.api.entity.FundHistory;
 import com.fund.tools.api.entity.FundLast;
 import com.fund.tools.api.service.FundHistoryService;
@@ -13,7 +16,7 @@ import org.springframework.stereotype.Component;
 import javax.annotation.Resource;
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -35,9 +38,8 @@ public class FundHistoryTask {
     @Resource
     private HolidayService holidayService;
 
-    private static final String API_URL = "https://fundf10.eastmoney.com/F10DataApi.aspx";
-    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-    private static final int MAX_UPDATE_COUNT = 5; // 每次最多更新5条数据
+    private static final String API_URL = ApiConstants.EASTMONEY_F10_API;
+    private static final int MAX_UPDATE_COUNT = BatchConstants.MAX_UPDATE_COUNT; // 每次最多更新5条数据
 
     /**
      * 周一到周五 18:00-24:00 每10分钟执行一次
@@ -52,7 +54,7 @@ public class FundHistoryTask {
      * 测试用：每分钟执行一次（用于调试）
      * 如需启用，请取消注释下面的 @Scheduled 注解
      */
-    // @Scheduled(cron = "0 0/1 * * * ?")
+     @Scheduled(cron = "0 17 * * * ?")
     public void testUpdateFundHistoryData() {
         log.info("【测试模式】开始执行基金历史净值更新任务");
         executeUpdate();
@@ -66,7 +68,7 @@ public class FundHistoryTask {
 
         try {
             // 判断今天是否为交易日
-            String today = LocalDate.now().format(DATE_FORMATTER);
+            String today = LocalDate.now().format(DateFormatConstants.DATE_FORMATTER);
             if (!holidayService.isTradingDay(today)) {
                 log.info("今天({})不是交易日，跳过执行", today);
                 return;
@@ -86,11 +88,11 @@ public class FundHistoryTask {
             int totalSize = fundLastList.size();
             int updateSize = Math.min(totalSize, MAX_UPDATE_COUNT);
             List<FundLast> toUpdateList = fundLastList.subList(0, updateSize);
-            
+
             log.info("共有{}只基金，本次更新{}只", totalSize, updateSize);
 
             // 计算日期范围：最近2个交易日
-            String formattedEndDate = LocalDate.now().format(DATE_FORMATTER);
+            String formattedEndDate = LocalDate.now().format(DateFormatConstants.DATE_FORMATTER);
             String formattedStartDate = getPreviousTradingDay(formattedEndDate);
 
             log.info("查询日期范围: {} 到 {}", formattedStartDate, formattedEndDate);
@@ -125,7 +127,7 @@ public class FundHistoryTask {
                     }
 
                     // 每次请求后等待1秒，避免频繁调用
-                    Thread.sleep(1000);
+                    Thread.sleep(ApiConstants.API_REQUEST_INTERVAL_MS);
                 } catch (Exception e) {
                     failCount++;
                     log.error("处理基金{}数据时发生异常", fundLast.getFundCode(), e);
@@ -156,24 +158,24 @@ public class FundHistoryTask {
      */
     private String getPreviousTradingDay(String currentDate) {
         try {
-            LocalDate date = LocalDate.parse(currentDate, DATE_FORMATTER);
+            LocalDate date = LocalDate.parse(currentDate, DateFormatConstants.DATE_FORMATTER);
             // 向前查找，最多找7天（防止长假）
             for (int i = 1; i <= 7; i++) {
                 LocalDate previousDate = date.minusDays(i);
-                String dateStr = previousDate.format(DATE_FORMATTER);
-                
+                String dateStr = previousDate.format(DateFormatConstants.DATE_FORMATTER);
+
                 if (holidayService.isTradingDay(dateStr)) {
                     log.debug("找到{}的前一个交易日: {}", currentDate, dateStr);
                     return dateStr;
                 }
             }
-            
+
             // 如果没找到，默认返回前一天的日历日期
             log.warn("未找到{}的前一个交易日，使用日历日期", currentDate);
-            return date.minusDays(1).format(DATE_FORMATTER);
+            return date.minusDays(1).format(DateFormatConstants.DATE_FORMATTER);
         } catch (Exception e) {
             log.error("获取{}的前一个交易日失败", currentDate, e);
-            return LocalDate.parse(currentDate, DATE_FORMATTER).minusDays(1).format(DATE_FORMATTER);
+            return LocalDate.parse(currentDate, DateFormatConstants.DATE_FORMATTER).minusDays(1).format(DateFormatConstants.DATE_FORMATTER);
         }
     }
 
@@ -188,7 +190,7 @@ public class FundHistoryTask {
 
             log.info("请求基金历史净值URL: {}", url);
 
-            String response = HttpUtil.get(url, 60000); // 设置60秒超时
+            String response = HttpUtil.get(url, ApiConstants.API_TIMEOUT_MS); // 设置60秒超时
 
             // 打印完整的API响应
             log.info("基金{}的API完整响应: {}", fundCode, response);
@@ -224,12 +226,12 @@ public class FundHistoryTask {
     }
 
     /**
-     * 解析API响应数据
+     * 解析API响应数据（HTML表格格式）
      */
     private List<FundHistory> parseApiResponse(String response, String fundCode, String fundName) {
         try {
             // 提取content内容（使用 DOTALL 模式匹配跨行内容）
-            Pattern pattern = Pattern.compile("content:\"(.*?)\",\"records", Pattern.DOTALL);
+            Pattern pattern = Pattern.compile("content:\"(.*?)\",records", Pattern.DOTALL);
             Matcher matcher = pattern.matcher(response);
 
             if (!matcher.find()) {
@@ -240,60 +242,61 @@ public class FundHistoryTask {
             String content = matcher.group(1);
             log.info("基金{}提取的content内容: {}", fundCode, content);
 
-            // 按换行符分割（支持 \n 和 \\n 两种格式）
-            String[] lines = content.split("\\\\n|\\n");
-            log.info("基金{}分割后的行数: {}", fundCode, lines.length);
-
             List<FundHistory> historyList = new ArrayList<>();
 
-            // 跳过标题行（第一行）
-            for (int i = 1; i < lines.length; i++) {
-                String line = lines[i].trim();
-                if (line.isEmpty()) {
+            // 解析HTML表格中的每一行数据
+            // 匹配 <tr><td>日期</td><td>净值</td><td>累计净值</td><td>增长率</td>...
+            Pattern rowPattern = Pattern.compile(
+                "<tr>\\s*" +
+                "<td>([^<]+)</td>\\s*" +  // 净值日期
+                "<td[^>]*>([^<]+)</td>\\s*" +  // 单位净值
+                "<td[^>]*>([^<]+)</td>\\s*" +  // 累计净值
+                "<td[^>]*>([^<]+)</td>"  // 日增长率
+            );
+
+            Matcher rowMatcher = rowPattern.matcher(content);
+
+            while (rowMatcher.find()) {
+                String date = rowMatcher.group(1).trim();
+                String netValue = rowMatcher.group(2).trim();
+                String accumulatedValue = rowMatcher.group(3).trim();
+                String growthRate = rowMatcher.group(4).trim();
+
+                log.debug("基金{}解析到一行数据: 日期={}, 净值={}, 累计净值={}, 增长率={}",
+                    fundCode, date, netValue, accumulatedValue, growthRate);
+
+                FundHistory history = new FundHistory();
+                history.setFundCode(fundCode);
+                history.setFundName(fundName);
+                history.setDate(date);
+
+                // 解析单位净值
+                try {
+                    history.setHistoryPrice(new BigDecimal(netValue));
+                } catch (NumberFormatException e) {
+                    log.warn("基金{}的日期{}净值解析失败: {}", fundCode, date, netValue);
                     continue;
                 }
 
-                // 按\t分割字段
-                String[] fields = line.split("\t");
-                log.info("基金{}第{}行字段数: {}, 内容: [{}]", fundCode, i, fields.length, line);
-
-                if (fields.length >= 4) {
-                    FundHistory history = new FundHistory();
-                    history.setFundCode(fundCode);
-                    history.setFundName(fundName);
-                    history.setDate(fields[0].trim()); // 净值日期
-
-                    // 解析单位净值
-                    try {
-                        history.setHistoryPrice(new BigDecimal(fields[1].trim()));
-                    } catch (NumberFormatException e) {
-                        log.warn("基金{}的日期{}净值解析失败: {}", fundCode, fields[0], fields[1]);
-                        continue;
+                // 解析日增长率（收益率）
+                try {
+                    if (growthRate != null && !growthRate.isEmpty() && !growthRate.equals("--")) {
+                        // 去除百分号
+                        String rateStr = growthRate.replace("%", "");
+                        history.setProfitPercent(new BigDecimal(rateStr));
                     }
-
-                    // 解析日增长率（收益率）
-                    try {
-                        String growthRate = fields[3].trim(); // 日增长率，格式如 "-0.70%"
-                        if (growthRate != null && !growthRate.isEmpty() && !growthRate.equals("--")) {
-                            // 去除百分号
-                            String rateStr = growthRate.replace("%", "");
-                            history.setProfitPercent(new BigDecimal(rateStr));
-                        }
-                    } catch (NumberFormatException e) {
-                        log.info("基金{}的日期{}日增长率解析失败: {}", fundCode, fields[0], fields[3]);
-                    }
-
-                    historyList.add(history);
-                } else {
-                    log.warn("基金{}第{}行字段数不足4个，实际: {}, 内容: [{}]", fundCode, i, fields.length, line);
+                } catch (NumberFormatException e) {
+                    log.info("基金{}的日期{}日增长率解析失败: {}", fundCode, date, growthRate);
                 }
+
+                historyList.add(history);
             }
 
             if (historyList.isEmpty()) {
                 log.warn("基金{}解析后没有有效数据", fundCode);
                 return null;
             }
-            
+
             log.info("基金{}成功解析到{}条历史净值数据", fundCode, historyList.size());
             return historyList;
         } catch (Exception e) {
@@ -347,10 +350,20 @@ public class FundHistoryTask {
                     log.debug("基金{}使用API返回的收益率: {}%", fundCode, todayHistory.getProfitPercent());
                 }
 
+                // 设置数据时间为历史数据的日期（转换为当天的23:59:59）
+                try {
+                    LocalDateTime dataTime = LocalDate.parse(todayHistory.getDate(), DateFormatConstants.DATE_FORMATTER)
+                            .atTime(23, 59, 59);
+                    existingFund.setDataTime(dataTime);
+                    log.debug("基金{}的数据时间设置为历史数据日期: {}", fundCode, dataTime);
+                } catch (Exception e) {
+                    log.warn("基金{}的历史数据日期解析失败: {}", fundCode, todayHistory.getDate(), e);
+                }
+
                 fundLastService.saveOrUpdateFundLast(existingFund);
-                log.info("成功更新基金{}的实时数据: currentPrice={}, prevPrice={}, profitPercent={}",
+                log.info("成功更新基金{}的实时数据: currentPrice={}, prevPrice={}, profitPercent={}, dataTime={}",
                         fundCode, todayHistory.getHistoryPrice(),
-                        existingFund.getPrevPrice(), existingFund.getProfitPercent());
+                        existingFund.getPrevPrice(), existingFund.getProfitPercent(), existingFund.getDataTime());
             }
         } catch (Exception e) {
             log.error("更新基金{}的实时数据失败", fundCode, e);

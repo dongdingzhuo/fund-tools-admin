@@ -50,6 +50,11 @@ public class FundLast implements Serializable {
     private BigDecimal prevPrice;
 
     /**
+     * 数据时间（实时接口返回的gztime或历史接口的date）
+     */
+    private LocalDateTime dataTime;
+
+    /**
      * 更新时间
      */
     private LocalDateTime updateTime;

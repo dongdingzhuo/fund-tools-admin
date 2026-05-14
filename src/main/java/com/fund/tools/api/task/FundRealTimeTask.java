@@ -2,8 +2,12 @@ package com.fund.tools.api.task;
 
 import cn.hutool.http.HttpUtil;
 import cn.hutool.json.JSONUtil;
+import com.fund.tools.api.config.ApiConstants;
+import com.fund.tools.api.config.BatchConstants;
+import com.fund.tools.api.config.DateFormatConstants;
 import com.fund.tools.api.dto.TiantianFundResponse;
 import com.fund.tools.api.entity.FundLast;
+import com.fund.tools.api.enums.TradingPeriodEnum;
 import com.fund.tools.api.service.FundLastService;
 import com.fund.tools.api.service.HolidayService;
 import lombok.extern.slf4j.Slf4j;
@@ -13,8 +17,8 @@ import org.springframework.stereotype.Component;
 import javax.annotation.Resource;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -31,9 +35,8 @@ public class FundRealTimeTask {
     @Resource
     private HolidayService holidayService;
 
-    private static final String API_URL = "https://fundgz.1234567.com.cn/js/";
-    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-    private static final int MAX_UPDATE_COUNT = 5; // 每次最多更新5条数据
+    private static final String API_URL = ApiConstants.TIAN_TIAN_FUND_API;
+    private static final int MAX_UPDATE_COUNT = BatchConstants.MAX_UPDATE_COUNT; // 每次最多更新5条数据
 
     /**
      * 周一到周五 09:30-15:30 每10分钟执行一次
@@ -51,7 +54,7 @@ public class FundRealTimeTask {
             }
 
             // 判断今天是否为交易日
-            String today = LocalDate.now().format(DATE_FORMATTER);
+            String today = LocalDate.now().format(DateFormatConstants.DATE_FORMATTER);
             if (!holidayService.isTradingDay(today)) {
                 log.info("今天({})不是交易日，跳过执行", today);
                 return;
@@ -94,7 +97,7 @@ public class FundRealTimeTask {
                     }
 
                     // 每次请求后等待1秒，避免频繁调用
-                    Thread.sleep(1000);
+                    Thread.sleep(ApiConstants.API_REQUEST_INTERVAL_MS);
                 } catch (Exception e) {
                     failCount++;
                     log.error("处理基金{}数据时发生异常", fundLast.getFundCode(), e);
@@ -118,18 +121,7 @@ public class FundRealTimeTask {
      */
     private boolean isTradingTime() {
         LocalTime now = LocalTime.now();
-        LocalTime startTime = LocalTime.of(9, 30);
-        LocalTime endTime = LocalTime.of(15, 30);
-
-        boolean inTimeRange = !now.isBefore(startTime) && !now.isAfter(endTime);
-
-        if (inTimeRange) {
-            log.debug("当前时间{}在交易时间内", now);
-        } else {
-            log.debug("当前时间{}不在交易时间内", now);
-        }
-
-        return inTimeRange;
+        return TradingPeriodEnum.REALTIME_UPDATE.isInRange(now);
     }
 
     /**
@@ -140,7 +132,7 @@ public class FundRealTimeTask {
             String url = API_URL + fundCode + ".js";
             log.debug("请求基金数据: {}", url);
     
-            String response = HttpUtil.get(url, 60000); // 设置60秒超时
+            String response = HttpUtil.get(url, ApiConstants.API_TIMEOUT_MS); // 设置60秒超时
     
             // 解析返回数据，格式为：jsonpgz({...});
             if (response == null || response.trim().isEmpty()) {
@@ -166,17 +158,29 @@ public class FundRealTimeTask {
             FundLast fundLast = new FundLast();
             fundLast.setFundCode(apiResponse.getFundcode());
             fundLast.setFundName(apiResponse.getName());
-    
+            
             // 设置估算值作为当前价格
             BigDecimal currentPrice = null;
             if (apiResponse.getGsz() != null && !apiResponse.getGsz().isEmpty()) {
                 currentPrice = new BigDecimal(apiResponse.getGsz());
                 fundLast.setCurrentPrice(currentPrice);
             }
-    
+            
             // 设置估算涨跌幅作为收益率
             if (apiResponse.getGszzl() != null && !apiResponse.getGszzl().isEmpty()) {
                 fundLast.setProfitPercent(new BigDecimal(apiResponse.getGszzl()));
+            }
+            
+            // 设置数据时间为API返回的估算时间（gztime）
+            if (apiResponse.getGztime() != null && !apiResponse.getGztime().isEmpty()) {
+                try {
+                    // gztime格式为 "yyyy-MM-dd HH:mm"，需要转换为LocalDateTime
+                    LocalDateTime dataTime = LocalDateTime.parse(apiResponse.getGztime(), DateFormatConstants.DATETIME_MINUTE_FORMATTER);
+                    fundLast.setDataTime(dataTime);
+                    log.debug("基金{}的数据时间设置为: {}", fundCode, dataTime);
+                } catch (Exception e) {
+                    log.warn("基金{}的gztime解析失败: {}", fundCode, apiResponse.getGztime(), e);
+                }
             }
     
             // 处理prevPrice：如果存在旧数据，将旧的currentPrice保存为prevPrice
