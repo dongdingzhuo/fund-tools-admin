@@ -64,6 +64,8 @@ public class FundSelfServiceImpl implements FundSelfService {
 
         FundSelf fundSelf = new FundSelf();
         BeanUtil.copyProperties(request, fundSelf);
+        // 设置创建时间
+        fundSelf.setCreateTime(LocalDateTime.now());
         boolean insertSuccess = fundSelfMapper.insert(fundSelf) > 0;
         
         if (insertSuccess) {
@@ -94,6 +96,8 @@ public class FundSelfServiceImpl implements FundSelfService {
         }
 
         BeanUtil.copyProperties(request, fundSelf);
+        // 设置更新时间
+        fundSelf.setUpdateTime(LocalDateTime.now());
         return fundSelfMapper.updateById(fundSelf) > 0;
     }
 

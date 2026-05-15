@@ -81,11 +81,12 @@ public class FundHistoryServiceImpl implements FundHistoryService {
         FundHistory existing = fundHistoryMapper.selectOne(wrapper);
 
         if (existing != null) {
-            // 更新
+            // 更新（t_fund_history不需要更新时间）
             history.setId(existing.getId());
             return fundHistoryMapper.updateById(history) > 0;
         } else {
-            // 新增
+            // 新增，设置创建时间
+            history.setCreateTime(LocalDateTime.now());
             return fundHistoryMapper.insert(history) > 0;
         }
     }

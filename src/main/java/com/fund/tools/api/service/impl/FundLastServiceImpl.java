@@ -30,12 +30,12 @@ public class FundLastServiceImpl implements FundLastService {
         FundLast existing = fundLastMapper.selectOne(wrapper);
 
         if (existing != null) {
-            // 更新
+            // 更新，设置更新时间
             fundLast.setId(existing.getId());
             fundLast.setUpdateTime(LocalDateTime.now());
             return fundLastMapper.updateById(fundLast) > 0;
         } else {
-            // 新增
+            // 新增，设置更新时间
             fundLast.setUpdateTime(LocalDateTime.now());
             return fundLastMapper.insert(fundLast) > 0;
         }

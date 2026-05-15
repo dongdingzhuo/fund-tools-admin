@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 /**
  * 异步基金任务服务
@@ -144,6 +145,8 @@ public class AsyncFundTaskService {
                     FundHistory history = FundApiUtil.fetchSingleDayHistory(fundCode, fundName, dateStr);
                     
                     if (history != null) {
+                        // 设置创建时间
+                        history.setCreateTime(LocalDateTime.now());
                         fundHistoryMapper.insert(history);
                         successCount++;
                         log.debug("成功获取基金{}日期{}的历史数据", fundCode, dateStr);

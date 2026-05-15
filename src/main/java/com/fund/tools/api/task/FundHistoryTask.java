@@ -350,14 +350,13 @@ public class FundHistoryTask {
                     log.debug("基金{}使用API返回的收益率: {}%", fundCode, todayHistory.getProfitPercent());
                 }
 
-                // 设置数据时间为历史数据的日期（转换为当天的23:59:59）
+                // 设置数据时间为当前时间（因为F10历史接口返回的日期没有时分秒）
                 try {
-                    LocalDateTime dataTime = LocalDate.parse(todayHistory.getDate(), DateFormatConstants.DATE_FORMATTER)
-                            .atTime(23, 59, 59);
+                    LocalDateTime dataTime = LocalDateTime.now();
                     existingFund.setDataTime(dataTime);
-                    log.debug("基金{}的数据时间设置为历史数据日期: {}", fundCode, dataTime);
+                    log.debug("基金{}的数据时间设置为当前时间: {}", fundCode, dataTime);
                 } catch (Exception e) {
-                    log.warn("基金{}的历史数据日期解析失败: {}", fundCode, todayHistory.getDate(), e);
+                    log.warn("基金{}设置数据时间失败", fundCode, e);
                 }
 
                 fundLastService.saveOrUpdateFundLast(existingFund);

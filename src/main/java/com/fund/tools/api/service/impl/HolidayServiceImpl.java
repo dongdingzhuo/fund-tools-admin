@@ -43,14 +43,12 @@ public class HolidayServiceImpl implements HolidayService {
         Holiday existing = holidayMapper.selectOne(wrapper);
 
         if (existing != null) {
-            // 更新
+            // 更新（t_holiday不需要更新时间）
             holiday.setId(existing.getId());
-            holiday.setUpdateTime(LocalDateTime.now());
             return holidayMapper.updateById(holiday) > 0;
         } else {
-            // 新增
+            // 新增，设置创建时间
             holiday.setCreateTime(LocalDateTime.now());
-            holiday.setUpdateTime(LocalDateTime.now());
             return holidayMapper.insert(holiday) > 0;
         }
     }
