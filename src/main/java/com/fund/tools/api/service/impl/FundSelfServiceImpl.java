@@ -64,8 +64,10 @@ public class FundSelfServiceImpl implements FundSelfService {
 
         FundSelf fundSelf = new FundSelf();
         BeanUtil.copyProperties(request, fundSelf);
-        // 设置创建时间
-        fundSelf.setCreateTime(LocalDateTime.now());
+        // 设置创建时间和更新时间
+        LocalDateTime now = LocalDateTime.now();
+        fundSelf.setCreateTime(now);
+        fundSelf.setUpdateTime(now);
         boolean insertSuccess = fundSelfMapper.insert(fundSelf) > 0;
         
         if (insertSuccess) {
