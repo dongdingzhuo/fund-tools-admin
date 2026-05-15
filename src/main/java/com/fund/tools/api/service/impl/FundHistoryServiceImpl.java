@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -26,19 +27,19 @@ public class FundHistoryServiceImpl implements FundHistoryService {
     public List<FundHistoryResponse> getHistoryByFundCodeAndDateRange(String fundCode, String startDate, String endDate) {
         LambdaQueryWrapper<FundHistory> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(FundHistory::getFundCode, fundCode);
-        
+
         if (startDate != null && !startDate.isEmpty()) {
             wrapper.ge(FundHistory::getDate, startDate);
         }
-        
+
         if (endDate != null && !endDate.isEmpty()) {
             wrapper.le(FundHistory::getDate, endDate);
         }
-        
+
         wrapper.orderByDesc(FundHistory::getDate);
-        
+
         List<FundHistory> historyList = fundHistoryMapper.selectList(wrapper);
-        
+
         return historyList.stream()
                 .map(this::convertToResponse)
                 .collect(Collectors.toList());
@@ -48,17 +49,17 @@ public class FundHistoryServiceImpl implements FundHistoryService {
     public List<FundHistory> getHistoryEntitiesByFundCodeAndDateRange(String fundCode, String startDate, String endDate) {
         LambdaQueryWrapper<FundHistory> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(FundHistory::getFundCode, fundCode);
-        
+
         if (startDate != null && !startDate.isEmpty()) {
             wrapper.ge(FundHistory::getDate, startDate);
         }
-        
+
         if (endDate != null && !endDate.isEmpty()) {
             wrapper.le(FundHistory::getDate, endDate);
         }
-        
+
         wrapper.orderByDesc(FundHistory::getDate);
-        
+
         return fundHistoryMapper.selectList(wrapper);
     }
 
