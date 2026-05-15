@@ -28,7 +28,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             throw new RuntimeException("用户名已存在");
         }
         
-        // 创建新用户（ID由雪花算法自动生成）
+        // 创建新用户（ID由数据库自动增长生成）
         User user = new User();
         user.setUserName(userName);
         user.setNickName(nickName);
