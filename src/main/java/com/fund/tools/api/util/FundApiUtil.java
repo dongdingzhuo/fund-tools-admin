@@ -10,6 +10,7 @@ import com.fund.tools.api.entity.FundLast;
 import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -81,6 +82,123 @@ public class FundApiUtil {
                     }
                 } else {
                     log.error("从API获取基金{}日期{}的历史数据失败，已重试{}次", fundCode, date, maxRetries, e);
+                    return null;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 从F10 API批量获取基金历史数据（带重试机制，每次获取7天）
+     *
+     * @param fundCode  基金代码
+     * @param fundName  基金名称
+     * @param startDate 开始日期（yyyy-MM-dd格式）
+     * @param endDate   结束日期（yyyy-MM-dd格式）
+     * @return 基金历史数据列表，如果获取失败返回null
+     */
+    public static List<FundHistory> fetchHistoryDataBatch(String fundCode, String fundName, String startDate, String endDate) {
+        try {
+            LocalDate startLocalDate = LocalDate.parse(startDate, DateFormatConstants.DATE_FORMATTER);
+            LocalDate endLocalDate = LocalDate.parse(endDate, DateFormatConstants.DATE_FORMATTER);
+            
+            List<FundHistory> allHistoryList = new ArrayList<>();
+            LocalDate currentStartDate = startLocalDate;
+            
+            log.info("开始批量获取基金{}的历史数据，范围: {} 到 {}", fundCode, startDate, endDate);
+            
+            // 每次获取7天数据，循环直到覆盖整个时间范围
+            while (!currentStartDate.isAfter(endLocalDate)) {
+                // 计算本次的结束日期（最多7天）
+                LocalDate currentEndDate = currentStartDate.plusDays(6); // 包含起始日共7天
+                if (currentEndDate.isAfter(endLocalDate)) {
+                    currentEndDate = endLocalDate;
+                }
+                
+                String batchStartDate = currentStartDate.format(DateFormatConstants.DATE_FORMATTER);
+                String batchEndDate = currentEndDate.format(DateFormatConstants.DATE_FORMATTER);
+                
+                log.debug("获取基金{}批次数据: {} 到 {}", fundCode, batchStartDate, batchEndDate);
+                
+                // 获取这一批次的7天数据
+                List<FundHistory> batchList = fetchHistoryDataSingleBatch(fundCode, fundName, batchStartDate, batchEndDate);
+                
+                if (batchList != null && !batchList.isEmpty()) {
+                    allHistoryList.addAll(batchList);
+                    log.debug("批次{}-{}获取到{}条数据", batchStartDate, batchEndDate, batchList.size());
+                }
+                
+                // 移动到下一批次
+                currentStartDate = currentEndDate.plusDays(1);
+                
+                // 每批次之间等待1秒，避免频繁调用
+                Thread.sleep(ApiConstants.API_REQUEST_INTERVAL_MS);
+            }
+            
+            log.info("基金{}批量获取完成，总共获取{}条历史数据", fundCode, allHistoryList.size());
+            return allHistoryList.isEmpty() ? null : allHistoryList;
+            
+        } catch (Exception e) {
+            log.error("批量获取基金{}历史数据失败", fundCode, e);
+            return null;
+        }
+    }
+    
+    /**
+     * 获取单个批次（7天）的历史数据
+     */
+    private static List<FundHistory> fetchHistoryDataSingleBatch(String fundCode, String fundName, String startDate, String endDate) {
+        int maxRetries = 3; // 最大重试次数
+        int retryCount = 0;
+
+        while (retryCount < maxRetries) {
+            try {
+                String url = String.format("%s?type=lsjz&code=%s&page=1&per=10&sdate=%s&edate=%s",
+                        ApiConstants.EASTMONEY_F10_API, fundCode, startDate, endDate);
+
+                log.debug("请求基金历史净值URL: {}", url);
+
+                // 使用 HttpUtil.createGet 并添加请求头，模拟浏览器请求
+                String response = HttpUtil.createGet(url)
+                        .timeout(ApiConstants.API_TIMEOUT_MS) // 60秒超时
+                        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
+                        .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
+                        .header("Connection", "keep-alive")
+                        .execute()
+                        .body();
+
+                if (response == null || response.trim().isEmpty()) {
+                    log.warn("基金{}时间范围{}-{}的API返回空响应", fundCode, startDate, endDate);
+                    return null;
+                }
+
+                // 解析API响应
+                List<FundHistory> historyList = parseFundHistoryResponse(response, fundCode, fundName);
+
+                if (historyList == null || historyList.isEmpty()) {
+                    log.debug("基金{}时间范围{}-{}的API返回数据为空或解析失败", fundCode, startDate, endDate);
+                    return null;
+                }
+
+                return historyList;
+            } catch (Exception e) {
+                retryCount++;
+                if (retryCount < maxRetries) {
+                    log.warn("从API获取基金{}时间范围{}-{}的历史数据失败，第{}次重试: {}",
+                            fundCode, startDate, endDate, retryCount, e.getMessage());
+                    try {
+                        // 重试前等待2秒
+                        Thread.sleep(2000);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        log.error("重试等待被中断", ie);
+                        return null;
+                    }
+                } else {
+                    log.error("从API获取基金{}时间范围{}-{}的历史数据失败，已重试{}次", fundCode, startDate, endDate, maxRetries, e);
                     return null;
                 }
             }

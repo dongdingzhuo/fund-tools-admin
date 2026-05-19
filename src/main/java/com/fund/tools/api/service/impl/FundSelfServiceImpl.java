@@ -189,7 +189,7 @@ public class FundSelfServiceImpl implements FundSelfService {
     }
 
     /**
-     * 从实时接口刷新数据（逻辑与 FundRealTimeTask 一致）
+     * 从实时接口刷新数据
      */
     private void refreshFromRealTimeApi(String userName) {
         try {
@@ -257,7 +257,7 @@ public class FundSelfServiceImpl implements FundSelfService {
     }
 
     /**
-     * 从历史接口刷新数据（逻辑与 FundHistoryTask 一致）
+     * 从历史接口刷新数据
      */
     private void refreshFromHistoryApi(String userName) {
         try {
@@ -301,7 +301,7 @@ public class FundSelfServiceImpl implements FundSelfService {
                             }
                             
                             // TODO: 从历史接口获取最新数据
-                            // 这里需要实现完整的HTML表格解析逻辑，参考 FundHistoryTask.parseApiResponse
+                            // 这里需要实现完整的HTML表格解析逻辑，参考 AsyncInitService.fetchHistoryDataForFund
                             log.info("基金{}需要从历史接口刷新数据", fundSelf.getFundCode());
                             
                             // 每次请求后等待1秒，避免频繁调用
@@ -350,14 +350,13 @@ public class FundSelfServiceImpl implements FundSelfService {
                 return false;
             }
 
-            // 解析返回数据（复用 FundHistoryTask 的解析逻辑）
+            // 解析返回数据（复用 AsyncInitService 的解析逻辑）
             // 这里简化处理，实际应该提取 parseApiResponse 方法的逻辑
             // 由于代码较长，这里仅做示意，实际需要完整实现
             log.info("基金{}的历史数据获取成功，需要进行解析和更新", fundCode);
             
-            // TODO: 这里需要实现完整的HTML表格解析逻辑，参考 FundHistoryTask.parseApiResponse
-            // 为了保持代码简洁，建议将 FundHistoryTask 中的 parseApiResponse 和 updateRealTimeDataFromHistory 
-            // 方法抽取为公共服务方法
+            // TODO: 这里需要实现完整的HTML表格解析逻辑，参考 AsyncInitService.fetchHistoryDataForFund
+            // 为了保持代码简洁，建议将 AsyncInitService 中的解析逻辑抽取为公共服务方法
             
             return true;
         } catch (Exception e) {

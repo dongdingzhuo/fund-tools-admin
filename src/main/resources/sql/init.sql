@@ -1,13 +1,15 @@
 -- 创建用户信息表
+DROP TABLE IF EXISTS `t_user`;
 CREATE TABLE IF NOT EXISTS `t_user` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `user_name` varchar(255) NOT NULL COMMENT '用户账号',
   `nick_name` varchar(255) NOT NULL COMMENT '昵称',
   PRIMARY KEY (`id`),
   UNIQUE KEY `idx_1` (`user_name`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 AUTO_INCREMENT=1 COMMENT='用户信息表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 AUTO_INCREMENT=1 AUTO_ID_CACHE=1 COMMENT='用户信息表';
 
 -- 创建自选基金表
+DROP TABLE IF EXISTS `t_fund_self`;
 CREATE TABLE IF NOT EXISTS `t_fund_self` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `user_name` varchar(255) NOT NULL COMMENT '用户账号',
@@ -19,9 +21,10 @@ CREATE TABLE IF NOT EXISTS `t_fund_self` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_user_fund` (`user_name`, `fund_code`),
   KEY `idx_user_name` (`user_name`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 AUTO_INCREMENT=1 COMMENT='自选基金表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 AUTO_INCREMENT=1 AUTO_ID_CACHE = 1 COMMENT='自选基金表';
 
 -- 创建实时基金数据表
+DROP TABLE IF EXISTS `t_fund_last`;
 CREATE TABLE IF NOT EXISTS `t_fund_last` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `fund_code` varchar(20) NOT NULL COMMENT '基金代码',
@@ -34,9 +37,10 @@ CREATE TABLE IF NOT EXISTS `t_fund_last` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_fund_code` (`fund_code`),
   KEY `idx_update_time` (`update_time`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 AUTO_INCREMENT=1 COMMENT='实时基金数据表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 AUTO_INCREMENT=1 AUTO_ID_CACHE = 1 COMMENT='实时基金数据表';
 
 -- 创建节假日日期表
+DROP TABLE IF EXISTS `t_holiday`;
 CREATE TABLE IF NOT EXISTS `t_holiday` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `date` varchar(10) NOT NULL COMMENT '日期（yyyy-MM-dd格式）',
@@ -50,9 +54,11 @@ CREATE TABLE IF NOT EXISTS `t_holiday` (
   UNIQUE KEY `uk_date` (`date`),
   KEY `idx_workday_flag` (`workday_flag`),
   KEY `idx_trading_day_flag` (`trading_day_flag`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 AUTO_INCREMENT=1 COMMENT='节假日日期表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 AUTO_INCREMENT=1 AUTO_ID_CACHE = 1 COMMENT='节假日日期表';
 
 -- 创建基金历史净值表
+DROP TABLE IF EXISTS `t_fund_history`;
+
 CREATE TABLE IF NOT EXISTS `t_fund_history` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `fund_code` varchar(20) NOT NULL COMMENT '基金代码',
@@ -65,4 +71,4 @@ CREATE TABLE IF NOT EXISTS `t_fund_history` (
   UNIQUE KEY `uk_fund_date` (`fund_code`, `date`),
   KEY `idx_fund_code` (`fund_code`),
   KEY `idx_date` (`date`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 AUTO_INCREMENT=1 COMMENT='基金历史净值表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 AUTO_INCREMENT=1 AUTO_ID_CACHE = 1 COMMENT='基金历史净值表';
