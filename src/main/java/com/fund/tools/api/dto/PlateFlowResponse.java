@@ -40,12 +40,7 @@ public class PlateFlowResponse implements Serializable {
     private BigDecimal mainFlowAmount;
 
     /**
-     * 主力净流入占比（%）
+     * 创建时间
      */
-    private BigDecimal mainFlowRate;
-
-    /**
-     * 数据时间
-     */
-    private LocalDateTime dataTime;
+    private LocalDateTime createTime;
 }

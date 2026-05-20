@@ -4,7 +4,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
 import java.io.Serializable;
-import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -54,24 +53,18 @@ public class EastmoneyPlateFlowResponse implements Serializable {
          * 主力净流入（元）(f62)
          */
         @JsonProperty("f62")
-        private BigDecimal mainFlow;
+        private Double mainFlow;
 
         /**
          * 主力成交额/总成交（元）(f63)
          */
         @JsonProperty("f63")
-        private BigDecimal mainDealAmount;
+        private Double mainDealAmount;
 
         /**
          * 主力流入金额（元）(f64)
          */
         @JsonProperty("f64")
-        private BigDecimal mainFlowAmount;
-
-        /**
-         * 主力净流入占比（%）(f65)
-         */
-        @JsonProperty("f65")
-        private BigDecimal mainFlowRate;
+        private Double mainFlowAmount;
     }
 }

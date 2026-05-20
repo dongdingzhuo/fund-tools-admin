@@ -78,13 +78,11 @@ DROP TABLE IF EXISTS `t_plate_flow`;
 CREATE TABLE IF NOT EXISTS `t_plate_flow` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `plate_name` varchar(100) NOT NULL COMMENT '板块名称',
-  `main_flow` decimal(18, 2) DEFAULT '0.00' COMMENT '主力净流入（元）',
-  `main_deal_amount` decimal(18, 2) DEFAULT '0.00' COMMENT '主力成交额/总成交（元）',
-  `main_flow_amount` decimal(18, 2) DEFAULT '0.00' COMMENT '主力流入金额（元）',
-  `main_flow_rate` decimal(10, 4) DEFAULT '0.0000' COMMENT '主力净流入占比（%）',
-  `data_time` datetime NOT NULL COMMENT '数据时间',
+  `main_flow` decimal(20, 2) DEFAULT '0.00' COMMENT '主力净流入（元）',
+  `main_deal_amount` decimal(20, 2) DEFAULT '0.00' COMMENT '主力成交额/总成交（元）',
+  `main_flow_amount` decimal(20, 2) DEFAULT '0.00' COMMENT '主力流入金额（元）',
   `create_time` datetime NOT NULL COMMENT '创建时间',
   PRIMARY KEY (`id`),
-  KEY `idx_data_time` (`data_time`),
+  KEY `idx_create_time` (`create_time`),
   KEY `idx_plate_name` (`plate_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 AUTO_INCREMENT=1 AUTO_ID_CACHE = 1 COMMENT='板块资金流向表';
