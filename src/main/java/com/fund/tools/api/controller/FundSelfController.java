@@ -52,6 +52,23 @@ public class FundSelfController {
     }
 
     /**
+     * 更新自选基金
+     */
+    @PutMapping("/{id}")
+    public Result<Boolean> updateFundSelf(@PathVariable Long id, @Validated @RequestBody FundSelfRequest request) {
+        try {
+            boolean success = fundSelfService.updateFundSelf(id, request);
+            if (success) {
+                return Result.success("更新成功", true);
+            } else {
+                return Result.error("更新失败");
+            }
+        } catch (Exception e) {
+            return Result.error(e.getMessage());
+        }
+    }
+
+    /**
      * 根据用户账号查询自选基金列表
      */
     @GetMapping("/list/{userName}")

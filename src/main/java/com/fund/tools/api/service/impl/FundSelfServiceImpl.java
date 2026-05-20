@@ -11,20 +11,25 @@ import com.fund.tools.api.config.DateFormatConstants;
 import com.fund.tools.api.dto.FundSelfRequest;
 import com.fund.tools.api.dto.FundSelfResponse;
 import com.fund.tools.api.dto.TiantianFundResponse;
+import com.fund.tools.api.entity.FundHistory;
 import com.fund.tools.api.entity.FundLast;
 import com.fund.tools.api.entity.FundSelf;
 import com.fund.tools.api.enums.TradingPeriodEnum;
+import com.fund.tools.api.mapper.FundHistoryMapper;
 import com.fund.tools.api.mapper.FundSelfMapper;
+import com.fund.tools.api.service.AsyncFundTaskService;
 import com.fund.tools.api.service.FundLastService;
 import com.fund.tools.api.service.FundSelfService;
 import com.fund.tools.api.service.HolidayService;
-import com.fund.tools.api.service.AsyncFundTaskService;
+import com.fund.tools.api.util.FundApiUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -50,6 +55,9 @@ public class FundSelfServiceImpl implements FundSelfService {
     @Resource
     private AsyncFundTaskService asyncFundTaskService;  // 注入异步基金任务服务
 
+    @Resource
+    private FundHistoryMapper fundHistoryMapper;  // 注入历史数据Mapper
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean addFundSelf(FundSelfRequest request) {
@@ -69,13 +77,13 @@ public class FundSelfServiceImpl implements FundSelfService {
         fundSelf.setCreateTime(now);
         fundSelf.setUpdateTime(now);
         boolean insertSuccess = fundSelfMapper.insert(fundSelf) > 0;
-        
+
         if (insertSuccess) {
             // 调用异步基金任务服务
             asyncFundTaskService.asyncSyncToFundLast(request.getFundCode());
             asyncFundTaskService.asyncFetchHistoryData(request.getFundCode());
         }
-        
+
         return insertSuccess;
     }
 
@@ -122,7 +130,7 @@ public class FundSelfServiceImpl implements FundSelfService {
     public List<FundSelfResponse> getFundSelfByUserName(String userName) {
         // 判断当前时间并决定是否需要刷新数据
         refreshFundDataIfNeeded(userName);
-        
+
         // 拉取数据库数据
         LambdaQueryWrapper<FundSelf> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(FundSelf::getUserName, userName)
@@ -141,15 +149,15 @@ public class FundSelfServiceImpl implements FundSelfService {
             wrapper.eq(FundSelf::getUserName, userName);
         }
         wrapper.orderByDesc(FundSelf::getCreateTime);
-        
+
         Page<FundSelf> fundSelfPage = fundSelfMapper.selectPage(page, wrapper);
-        
+
         Page<FundSelfResponse> responsePage = new Page<>();
         BeanUtil.copyProperties(fundSelfPage, responsePage, "records");
         responsePage.setRecords(fundSelfPage.getRecords().stream()
                 .map(this::convertToResponse)
                 .collect(Collectors.toList()));
-        
+
         return responsePage;
     }
 
@@ -160,28 +168,28 @@ public class FundSelfServiceImpl implements FundSelfService {
         try {
             LocalTime now = LocalTime.now();
             String today = LocalDate.now().format(DateFormatConstants.DATE_FORMATTER);
-            
+
             // 判断今天是否为交易日
             boolean isTradingDay = holidayService.isTradingDay(today);
             if (!isTradingDay) {
                 log.debug("今天({})不是交易日，不需要刷新数据", today);
                 return;
             }
-            
+
             // 条件1: 交易日早盘交易时段，从实时接口获取数据
             if (TradingPeriodEnum.MORNING_TRADING.isInRange(now)) {
                 log.info("当前时间在{}，检查是否需要从实时接口刷新数据", TradingPeriodEnum.MORNING_TRADING.getDescription());
                 refreshFromRealTimeApi(userName);
                 return;
             }
-            
+
             // 条件2: 交易日晚间时段，从历史接口获取数据
             if (TradingPeriodEnum.EVENING_UPDATE.isInRange(now)) {
                 log.info("当前时间在{}，检查是否需要从历史接口刷新数据", TradingPeriodEnum.EVENING_UPDATE.getDescription());
                 refreshFromHistoryApi(userName);
                 return;
             }
-            
+
             log.debug("当前时间不在需要刷新的时间段内，直接返回数据库数据");
         } catch (Exception e) {
             log.error("判断是否需要刷新基金数据失败", e);
@@ -197,29 +205,29 @@ public class FundSelfServiceImpl implements FundSelfService {
             LambdaQueryWrapper<FundSelf> wrapper = new LambdaQueryWrapper<>();
             wrapper.eq(FundSelf::getUserName, userName);
             List<FundSelf> fundSelfList = fundSelfMapper.selectList(wrapper);
-            
+
             if (fundSelfList == null || fundSelfList.isEmpty()) {
                 log.info("用户{}没有自选基金，跳过刷新", userName);
                 return;
             }
-            
+
             LocalDateTime now = LocalDateTime.now();
             int refreshCount = 0;
-            
+
             for (FundSelf fundSelf : fundSelfList) {
                 try {
                     // 获取数据库中现有的基金数据
                     FundLast existingFund = fundLastService.getFundLastByCode(fundSelf.getFundCode());
-                    
+
                     if (existingFund != null && existingFund.getDataTime() != null) {
                         // 判断数据时间是否超过30分钟
-                        long minutesDiff = java.time.Duration.between(existingFund.getDataTime(), now).toMinutes();
-                        
+                        long minutesDiff = Duration.between(existingFund.getDataTime(), now).toMinutes();
+
                         if (minutesDiff > BatchConstants.REALTIME_REFRESH_THRESHOLD_MINUTES) {
-                            log.info("基金{}的数据时间为{}，已超过{}分钟，开始从实时接口刷新", 
+                            log.info("基金{}的数据时间为{}，已超过{}分钟，开始从实时接口刷新",
                                     fundSelf.getFundCode(), existingFund.getDataTime(),
                                     BatchConstants.REALTIME_REFRESH_THRESHOLD_MINUTES);
-                            
+
                             // 从实时接口获取最新数据
                             FundLast updatedFund = fetchFundRealTimeData(fundSelf.getFundCode());
                             if (updatedFund != null) {
@@ -231,7 +239,7 @@ public class FundSelfServiceImpl implements FundSelfService {
                                 refreshCount++;
                                 log.info("成功刷新基金{}的实时数据", fundSelf.getFundCode());
                             }
-                            
+
                             // 每次请求后等待1秒，避免频繁调用
                             Thread.sleep(ApiConstants.API_REQUEST_INTERVAL_MS);
                         }
@@ -249,7 +257,7 @@ public class FundSelfServiceImpl implements FundSelfService {
                     log.error("刷新基金{}的实时数据失败", fundSelf.getFundCode(), e);
                 }
             }
-            
+
             log.info("实时数据刷新完成，共刷新{}只基金", refreshCount);
         } catch (Exception e) {
             log.error("从实时接口刷新数据失败", e);
@@ -265,54 +273,62 @@ public class FundSelfServiceImpl implements FundSelfService {
             LambdaQueryWrapper<FundSelf> wrapper = new LambdaQueryWrapper<>();
             wrapper.eq(FundSelf::getUserName, userName);
             List<FundSelf> fundSelfList = fundSelfMapper.selectList(wrapper);
-            
+
             if (fundSelfList == null || fundSelfList.isEmpty()) {
                 log.info("用户{}没有自选基金，跳过刷新", userName);
                 return;
             }
-            
+
             String today = LocalDate.now().format(DateFormatConstants.DATE_FORMATTER);
             LocalDateTime today1800 = LocalDate.now().atTime(BatchConstants.HISTORY_REFRESH_HOUR, 0, 0);
             int refreshCount = 0;
-            
+
             for (FundSelf fundSelf : fundSelfList) {
                 try {
                     // 获取数据库中现有的基金数据
                     FundLast existingFund = fundLastService.getFundLastByCode(fundSelf.getFundCode());
-                    
+
                     if (existingFund != null && existingFund.getDataTime() != null) {
                         // 判断数据时间是否在今天18:00之前
                         if (existingFund.getDataTime().isBefore(today1800)) {
-                            log.info("基金{}的数据时间为{}，在今天{}:00之前，开始从历史接口刷新", 
+                            log.info("基金{}的数据时间为{}，在今天{}:00之前，开始从历史接口刷新",
                                     fundSelf.getFundCode(), existingFund.getDataTime(),
                                     BatchConstants.HISTORY_REFRESH_HOUR);
-                            
+
                             // 从历史接口获取最新数据
                             boolean success = fetchAndUpdateHistoryData(
-                                    fundSelf.getFundCode(), 
+                                    fundSelf.getFundCode(),
                                     existingFund.getFundName(),
                                     today,
                                     today
                             );
-                            
+
                             if (success) {
                                 refreshCount++;
                                 log.info("成功刷新基金{}的历史数据", fundSelf.getFundCode());
                             }
-                            
-                            // TODO: 从历史接口获取最新数据
-                            // 这里需要实现完整的HTML表格解析逻辑，参考 AsyncInitService.fetchHistoryDataForFund
-                            log.info("基金{}需要从历史接口刷新数据", fundSelf.getFundCode());
-                            
+
                             // 每次请求后等待1秒，避免频繁调用
                             Thread.sleep(ApiConstants.API_REQUEST_INTERVAL_MS);
                         }
                     } else if (existingFund == null) {
-                        // 如果数据库中不存在该基金数据，直接从历史接口获取
-                        log.info("基金{}在数据库中不存在，从历史接口获取数据", fundSelf.getFundCode());
+                        // 如果数据库中不存在该基金数据，先从实时接口获取基金名称，再从历史接口获取数据
+                        log.info("基金{}在数据库中不存在，先获取实时数据得到基金名称", fundSelf.getFundCode());
+                        FundLast realTimeFund = fetchFundRealTimeData(fundSelf.getFundCode());
+                        String actualFundName = fundSelf.getFundCode(); // 默认使用基金代码
+
+                        if (realTimeFund != null && realTimeFund.getFundName() != null) {
+                            actualFundName = realTimeFund.getFundName();
+                            // 保存实时数据
+                            fundLastService.saveOrUpdateFundLast(realTimeFund);
+                            log.info("成功获取基金{}的实时数据和名称: {}", fundSelf.getFundCode(), actualFundName);
+                        } else {
+                            log.warn("获取基金{}的实时数据失败，使用基金代码作为名称", fundSelf.getFundCode());
+                        }
+
                         boolean success = fetchAndUpdateHistoryData(
-                                fundSelf.getFundCode(), 
-                                fundSelf.getFundCode(), // 暂时使用基金代码作为名称
+                                fundSelf.getFundCode(),
+                                actualFundName,
                                 today,
                                 today
                         );
@@ -325,7 +341,7 @@ public class FundSelfServiceImpl implements FundSelfService {
                     log.error("刷新基金{}的历史数据失败", fundSelf.getFundCode(), e);
                 }
             }
-            
+
             log.info("历史数据刷新完成，共刷新{}只基金", refreshCount);
         } catch (Exception e) {
             log.error("从历史接口刷新数据失败", e);
@@ -350,15 +366,95 @@ public class FundSelfServiceImpl implements FundSelfService {
                 return false;
             }
 
-            // 解析返回数据（复用 AsyncInitService 的解析逻辑）
-            // 这里简化处理，实际应该提取 parseApiResponse 方法的逻辑
-            // 由于代码较长，这里仅做示意，实际需要完整实现
-            log.info("基金{}的历史数据获取成功，需要进行解析和更新", fundCode);
-            
-            // TODO: 这里需要实现完整的HTML表格解析逻辑，参考 AsyncInitService.fetchHistoryDataForFund
-            // 为了保持代码简洁，建议将 AsyncInitService 中的解析逻辑抽取为公共服务方法
-            
-            return true;
+            // 解析返回数据（复用 FundApiUtil 的解析逻辑）
+            List<FundHistory> historyList = FundApiUtil.parseFundHistoryResponse(response, fundCode, fundName);
+
+            if (historyList == null || historyList.isEmpty()) {
+                log.warn("基金{}在时间范围{}-{}内没有获取到历史数据", fundCode, startDate, endDate);
+                return false;
+            }
+
+            log.info("基金{}获取到{}条历史数据，开始保存", fundCode, historyList.size());
+
+            int successCount = 0;
+            int skipCount = 0;
+            int failCount = 0;
+
+            // 保存或更新每条历史数据
+            for (FundHistory history : historyList) {
+                try {
+                    // 检查该日期的数据是否已存在
+                    LambdaQueryWrapper<FundHistory> wrapper = new LambdaQueryWrapper<>();
+                    wrapper.eq(FundHistory::getFundCode, fundCode)
+                           .eq(FundHistory::getDate, history.getDate());
+                    Long dateCount = fundHistoryMapper.selectCount(wrapper);
+
+                    if (dateCount > 0) {
+                        log.debug("基金{}日期{}的数据已存在，跳过", fundCode, history.getDate());
+                        skipCount++;
+                        continue;
+                    }
+
+                    // 设置创建时间并插入
+                    history.setCreateTime(LocalDateTime.now());
+                    fundHistoryMapper.insert(history);
+                    successCount++;
+                    log.debug("成功保存基金{}日期{}的历史数据", fundCode, history.getDate());
+
+                } catch (Exception e) {
+                    log.error("保存基金{}日期{}的历史数据失败", fundCode, history.getDate(), e);
+                    failCount++;
+                }
+            }
+
+            log.info("基金{}历史数据获取完成 - 成功: {}, 跳过: {}, 失败: {}", fundCode, successCount, skipCount, failCount);
+
+            // 同时更新实时数据表中的最新净值
+            if (!historyList.isEmpty()) {
+                FundHistory latestHistory = historyList.get(0); // 第一条是最新的
+                FundLast existingFund = fundLastService.getFundLastByCode(fundCode);
+                if (existingFund != null) {
+                    // 更新当前净值（历史接口返回的单位净值）
+                    existingFund.setCurrentPrice(latestHistory.getHistoryPrice());
+                    // 注意：不更新prevPrice，保留原有的上一个交易日净值
+                    // 如果有收益率信息，也更新
+                    if (latestHistory.getProfitPercent() != null) {
+                        existingFund.setProfitPercent(latestHistory.getProfitPercent());
+                    }
+                    // 设置数据时间为历史数据的日期
+                    try {
+                        LocalDateTime dataTime = LocalDate.parse(latestHistory.getDate(), DateFormatConstants.DATE_FORMATTER).atStartOfDay();
+                        existingFund.setDataTime(dataTime);
+                    } catch (Exception e) {
+                        log.warn("基金{}的日期解析失败: {}", fundCode, latestHistory.getDate(), e);
+                    }
+                    fundLastService.saveOrUpdateFundLast(existingFund);
+                    log.info("成功更新基金{}的实时数据表中的历史净值，净值={}, 数据时间={}",
+                            fundCode, latestHistory.getHistoryPrice(), latestHistory.getDate());
+                } else {
+                    // 如果实时数据表中不存在该基金，创建新记录
+                    FundLast newFundLast = new FundLast();
+                    newFundLast.setFundCode(fundCode);
+                    newFundLast.setFundName(fundName);
+                    newFundLast.setCurrentPrice(latestHistory.getHistoryPrice());
+                    // 新记录中，prevPrice设置为与currentPrice相同
+                    newFundLast.setPrevPrice(latestHistory.getHistoryPrice());
+                    if (latestHistory.getProfitPercent() != null) {
+                        newFundLast.setProfitPercent(latestHistory.getProfitPercent());
+                    }
+                    try {
+                        LocalDateTime dataTime = LocalDate.parse(latestHistory.getDate(), DateFormatConstants.DATE_FORMATTER).atStartOfDay();
+                        newFundLast.setDataTime(dataTime);
+                    } catch (Exception e) {
+                        log.warn("基金{}的日期解析失败: {}", fundCode, latestHistory.getDate(), e);
+                    }
+                    fundLastService.saveOrUpdateFundLast(newFundLast);
+                    log.info("成功为基金{}创建实时数据记录，净值={}, 数据时间={}",
+                            fundCode, latestHistory.getHistoryPrice(), latestHistory.getDate());
+                }
+            }
+
+            return successCount > 0;
         } catch (Exception e) {
             log.error("从 API 获取基金{}的历史净值数据失败", fundCode, e);
             return false;
@@ -385,24 +481,24 @@ public class FundSelfServiceImpl implements FundSelfService {
                 // 设置最新收益率
                 response.setProfitPercent(fundLast.getProfitPercent());
                 // 设置数据时间（优先使用dataTime，如果为空则使用updateTime）
-                LocalDateTime fundUpdateTime = fundLast.getDataTime() != null ? 
+                LocalDateTime fundUpdateTime = fundLast.getDataTime() != null ?
                         fundLast.getDataTime() : fundLast.getUpdateTime();
                 response.setFundUpdateTime(fundUpdateTime);
 
                 // 计算持有收益和持有收益率
-                if (fundSelf.getBaseAmount() != null && fundSelf.getShareQuantity() != null 
+                if (fundSelf.getBaseAmount() != null && fundSelf.getShareQuantity() != null
                         && fundLast.getCurrentPrice() != null) {
                     // 持有收益 = (当前净值 - 成本价) * 持有份额
                     BigDecimal holdingProfit = fundLast.getCurrentPrice().subtract(fundSelf.getBaseAmount())
                             .multiply(fundSelf.getShareQuantity());
-                    response.setHoldingProfit(holdingProfit.setScale(2, BigDecimal.ROUND_HALF_UP));
+                    response.setHoldingProfit(holdingProfit.setScale(2, RoundingMode.HALF_UP));
 
                     // 持有收益率 = (当前净值 - 成本价) / 成本价 * 100%
                     if (fundSelf.getBaseAmount().compareTo(BigDecimal.ZERO) != 0) {
                         BigDecimal holdingProfitPercent = fundLast.getCurrentPrice().subtract(fundSelf.getBaseAmount())
-                                .divide(fundSelf.getBaseAmount(), 4, BigDecimal.ROUND_HALF_UP)
+                                .divide(fundSelf.getBaseAmount(), 4, RoundingMode.HALF_UP)
                                 .multiply(new BigDecimal("100"));
-                        response.setHoldingProfitPercent(holdingProfitPercent.setScale(2, BigDecimal.ROUND_HALF_UP));
+                        response.setHoldingProfitPercent(holdingProfitPercent.setScale(2, RoundingMode.HALF_UP));
                     } else {
                         response.setHoldingProfitPercent(BigDecimal.ZERO);
                     }
@@ -482,6 +578,15 @@ public class FundSelfServiceImpl implements FundSelfService {
                 fundLast.setCurrentPrice(currentPrice);
             }
 
+            // 设置单位净值(dwjz)作为上一个交易日净值
+            if (apiResponse.getDwjz() != null && !apiResponse.getDwjz().isEmpty()) {
+                fundLast.setPrevPrice(new BigDecimal(apiResponse.getDwjz()));
+                log.debug("基金{}的prevPrice设置为API返回的dwjz: {}", fundCode, apiResponse.getDwjz());
+            } else if (currentPrice != null) {
+                // 如果dwjz为空，使用currentPrice作为prevPrice
+                fundLast.setPrevPrice(currentPrice);
+            }
+
             // 设置估算涨跌幅作为收益率
             if (apiResponse.getGszzl() != null && !apiResponse.getGszzl().isEmpty()) {
                 fundLast.setProfitPercent(new BigDecimal(apiResponse.getGszzl()));
@@ -499,13 +604,8 @@ public class FundSelfServiceImpl implements FundSelfService {
                 }
             }
 
-            // 新基金prevPrice默认等于currentPrice
-            if (currentPrice != null) {
-                fundLast.setPrevPrice(currentPrice);
-            }
-
             log.info("成功获取基金{}的实时数据: name={}, price={}, prevPrice={}, profit={}",
-                    fundCode, apiResponse.getName(), apiResponse.getGsz(), 
+                    fundCode, apiResponse.getName(), apiResponse.getGsz(),
                     fundLast.getPrevPrice(), apiResponse.getGszzl());
 
             return fundLast;
