@@ -48,6 +48,9 @@ public class AsyncInitService {
     @Resource
     private FundLastMapper fundLastMapper;
 
+    @Resource
+    private PlateFlowService plateFlowService;
+
     /**
      * 异步同步节假日数据
      */
@@ -446,6 +449,26 @@ public class AsyncInitService {
             log.info("成功删除非自选基金的{}条实时基金数据", deleteCount);
         } catch (Exception e) {
             log.error("删除非自选基金实时数据失败", e);
+        }
+    }
+
+    /**
+     * 异步获取板块资金流向数据
+     */
+    @Async
+    public void asyncFetchPlateFlowData() {
+        try {
+            log.info("[异步任务4] 开始执行板块资金流向数据获取任务");
+            
+            boolean success = plateFlowService.fetchAndSavePlateFlow();
+            
+            if (success) {
+                log.info("[异步任务4] 板块资金流向数据获取成功");
+            } else {
+                log.warn("[异步任务4] 板块资金流向数据获取失败");
+            }
+        } catch (Exception e) {
+            log.error("[异步任务4] 板块资金流向数据获取异常", e);
         }
     }
 }
